@@ -777,7 +777,7 @@ fn render_health(frame: &mut Frame<'_>, app: &App, area: Rect) {
 }
 
 fn render_hints(frame: &mut Frame<'_>, app: &App, mode: ViewMode, area: Rect) {
-    let actual = app.mode_choice.forced().unwrap_or(mode).name();
+    let actual = mode.name();
     let line = Line::from(vec![
         key_hint("←/→", "GPU"),
         Span::styled("  ·  ", Style::default().fg(DIM)),
