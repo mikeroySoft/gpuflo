@@ -34,7 +34,7 @@ const HISTORY_CAPACITY: usize = 240;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ViewMode {
-    Hero,
+    Mode,
     Compact,
     Mini,
     Tiny,
@@ -43,7 +43,7 @@ enum ViewMode {
 impl ViewMode {
     fn name(self) -> &'static str {
         match self {
-            Self::Hero => "hero",
+            Self::Mode => "mode",
             Self::Compact => "compact",
             Self::Mini => "mini",
             Self::Tiny => "tiny",
@@ -54,7 +54,7 @@ impl ViewMode {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ModeChoice {
     Auto,
-    Hero,
+    Mode,
     Compact,
     Mini,
     Tiny,
@@ -63,8 +63,8 @@ enum ModeChoice {
 impl ModeChoice {
     fn next(self) -> Self {
         match self {
-            Self::Auto => Self::Hero,
-            Self::Hero => Self::Compact,
+            Self::Auto => Self::Mode,
+            Self::Mode => Self::Compact,
             Self::Compact => Self::Mini,
             Self::Mini => Self::Tiny,
             Self::Tiny => Self::Auto,
@@ -74,7 +74,7 @@ impl ModeChoice {
     fn forced(self) -> Option<ViewMode> {
         match self {
             Self::Auto => None,
-            Self::Hero => Some(ViewMode::Hero),
+            Self::Mode => Some(ViewMode::Mode),
             Self::Compact => Some(ViewMode::Compact),
             Self::Mini => Some(ViewMode::Mini),
             Self::Tiny => Some(ViewMode::Tiny),
@@ -357,8 +357,8 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<()> {
 }
 
 fn automatic_mode(area: Rect) -> ViewMode {
-    if area.width >= 72 && area.height >= 29 {
-        ViewMode::Hero
+    if area.width >= 72 && area.height >= 34 {
+        ViewMode::Mode
     } else if area.width >= 62 && area.height >= 17 {
         ViewMode::Compact
     } else if area.width >= 48 && area.height >= 11 {
@@ -370,7 +370,7 @@ fn automatic_mode(area: Rect) -> ViewMode {
 
 fn mode_fits(mode: ViewMode, area: Rect) -> bool {
     match mode {
-        ViewMode::Hero => area.width >= 72 && area.height >= 29,
+        ViewMode::Mode => area.width >= 72 && area.height >= 34,
         ViewMode::Compact => area.width >= 62 && area.height >= 17,
         ViewMode::Mini => area.width >= 48 && area.height >= 11,
         ViewMode::Tiny => true,
@@ -382,7 +382,7 @@ fn render(frame: &mut Frame<'_>, app: &App) {
     frame.render_widget(Block::default().style(Style::default().bg(BG)), area);
     let mode = app.effective_mode(area);
     match mode {
-        ViewMode::Hero => render_hero(frame, app, centered(area, area.width.min(82), 27)),
+        ViewMode::Mode => render_mode(frame, app, centered(area, area.width.min(82), 32)),
         ViewMode::Compact => render_compact(frame, app, centered(area, area.width.min(74), 15)),
         ViewMode::Mini => render_mini(frame, app, centered(area, area.width.min(74), 9)),
         ViewMode::Tiny => render_tiny(frame, app, area),
@@ -398,10 +398,11 @@ fn centered(area: Rect, width: u16, height: u16) -> Rect {
     )
 }
 
-fn render_hero(frame: &mut Frame<'_>, app: &App, area: Rect) {
+fn render_mode(frame: &mut Frame<'_>, app: &App, area: Rect) {
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
+            Constraint::Length(6),
             Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Length(1),
@@ -417,13 +418,19 @@ fn render_hero(frame: &mut Frame<'_>, app: &App, area: Rect) {
         ])
         .split(area);
 
-    render_header(frame, app, rows[0]);
-    render_gpu_strip(frame, app, rows[2]);
-    render_metric_panel(frame, app, rows[4], MetricKind::Activity, ViewMode::Hero);
-    render_metric_panel(frame, app, rows[6], MetricKind::Memory, ViewMode::Hero);
-    render_support(frame, app, rows[8]);
-    render_health(frame, app, rows[9]);
-    render_hints(frame, app, ViewMode::Hero, rows[11]);
+    render_logo(frame, app, rows[0]);
+    frame.render_widget(
+        Paragraph::new("Power in, tokens out.")
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(MUTED)),
+        rows[1],
+    );
+    render_gpu_strip(frame, app, rows[3]);
+    render_metric_panel(frame, app, rows[5], MetricKind::Activity, ViewMode::Mode);
+    render_metric_panel(frame, app, rows[7], MetricKind::Memory, ViewMode::Mode);
+    render_support(frame, app, rows[9]);
+    render_health(frame, app, rows[10]);
+    render_hints(frame, app, ViewMode::Mode, rows[12]);
 }
 
 fn render_compact(frame: &mut Frame<'_>, app: &App, area: Rect) {
@@ -662,7 +669,7 @@ fn render_metric_panel(
     };
     render_value_row(frame, inner, &left, &right, graph_color);
 
-    if mode == ViewMode::Hero && inner.height > 2 {
+    if mode == ViewMode::Mode && inner.height > 2 {
         let graph_area = Rect::new(inner.x, inner.y + 2, inner.width, inner.height - 2);
         let history = match kind {
             MetricKind::Activity => &gpu.activity_history,
@@ -774,6 +781,37 @@ fn render_health(frame: &mut Frame<'_>, app: &App, area: Rect) {
         Span::styled(text, Style::default().fg(color)),
     ]);
     frame.render_widget(Paragraph::new(line).alignment(Alignment::Center), area);
+}
+
+fn render_logo(frame: &mut Frame<'_>, app: &App, area: Rect) {
+    const LOGO: [&str; 6] = [
+        " ██████╗ ██████╗ ██╗   ██╗███████╗██╗      ██████╗ ",
+        "██╔════╝ ██╔══██╗██║   ██║██╔════╝██║     ██╔═══██╗",
+        "██║  ███╗██████╔╝██║   ██║█████╗  ██║     ██║   ██║",
+        "██║   ██║██╔══██╗██║   ██║██╔══╝  ██║     ██║   ██║",
+        "╚██████╔╝██║  ██║╚██████╔╝██║     ███████╗╚██████╔╝",
+        " ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚═╝     ╚══════╝ ╚═════╝ ",
+    ];
+    let breath = ((app.started.elapsed().as_secs_f64() * 1.6).sin() + 1.0) * 0.5;
+    let lines = LOGO
+        .iter()
+        .enumerate()
+        .map(|(row, text)| {
+            let vertical = row as f64 / (LOGO.len() - 1) as f64;
+            let color = if vertical < 0.5 {
+                rgb_lerp(CREAM, AMBER, vertical * 2.0)
+            } else {
+                rgb_lerp(AMBER, RUST, (vertical - 0.5) * 2.0)
+            };
+            Line::styled(
+                *text,
+                Style::default()
+                    .fg(rgb_lerp(DIM, color, 0.82 + breath * 0.18))
+                    .add_modifier(Modifier::BOLD),
+            )
+        })
+        .collect::<Vec<_>>();
+    frame.render_widget(Paragraph::new(lines).alignment(Alignment::Center), area);
 }
 
 fn render_hints(frame: &mut Frame<'_>, app: &App, mode: ViewMode, area: Rect) {
