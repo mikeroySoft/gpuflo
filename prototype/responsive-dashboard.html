@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gruflo responsive dashboard prototype</title>
+<style>
+:root {
+  color-scheme: dark;
+  --ink: #f2e5ce;
+  --muted: #9b8b76;
+  --dim: #5d5144;
+  --bg: #0c0b09;
+  --surface: #13110e;
+  --surface-2: #19150f;
+  --line: #3f3325;
+  --amber: #e7a243;
+  --rust: #b85e2e;
+  --cream: #fff1d2;
+  --good: #a8bd7b;
+  --warn: #e7a243;
+  --bad: #e55b45;
+  --shadow: 0 24px 80px #000b;
+  font-family: "Iosevka", "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--ink); }
+body {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 28px 28px 90px;
+  background:
+    radial-gradient(circle at 50% -20%, #66371f2b 0, transparent 42%),
+    linear-gradient(120deg, transparent 0 49.7%, #e7a24308 49.8% 50.1%, transparent 50.2%),
+    var(--bg);
+}
+button { font: inherit; }
+.prototype-note {
+  position: fixed; top: 12px; left: 14px; color: var(--dim); font-size: 10px;
+  letter-spacing: .12em; text-transform: uppercase;
+}
+.terminal {
+  container-type: inline-size;
+  width: min(1180px, 100%);
+  min-height: min(760px, calc(100vh - 130px));
+  border: 1px solid #4f3c28;
+  border-radius: 15px;
+  overflow: hidden;
+  background: #0d0c0aee;
+  box-shadow: var(--shadow), inset 0 1px #fff1d20a;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+}
+.topbar {
+  min-height: 50px; display: flex; align-items: center; gap: 14px;
+  padding: 0 18px; border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, #19150f, #100e0b);
+}
+.brand { display: inline-flex; align-items: center; gap: 9px; min-width: 120px; }
+.hornmark { width: 22px; height: 18px; position: relative; display: inline-block; }
+.hornmark::before, .hornmark::after {
+  content: ""; position: absolute; top: 1px; width: 11px; height: 10px;
+  border-top: 2px solid var(--amber);
+}
+.hornmark::before { left: 0; border-left: 2px solid var(--amber); border-radius: 12px 0 0 0; transform: rotate(-12deg); }
+.hornmark::after { right: 0; border-right: 2px solid var(--amber); border-radius: 0 12px 0 0; transform: rotate(12deg); }
+.hornmark i { position: absolute; width: 10px; height: 10px; left: 6px; top: 6px; border: 2px solid var(--rust); border-radius: 45% 45% 55% 55%; }
+.brand strong { letter-spacing: .08em; color: var(--cream); font-size: 15px; }
+.live { color: var(--good); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
+.live::before { content: "●"; margin-right: 6px; }
+.host { color: var(--muted); font-size: 11px; margin-left: auto; }
+.clock { color: var(--dim); font-size: 11px; }
+.gpu-strip {
+  display: flex; gap: 7px; padding: 9px 12px; border-bottom: 1px solid #2f271d;
+  background: #100e0b; overflow: hidden;
+}
+.gpu-chip {
+  appearance: none; border: 1px solid #3c3125; border-radius: 8px; background: #15120e;
+  color: var(--muted); min-width: 142px; padding: 7px 9px; text-align: left; cursor: pointer;
+  display: grid; grid-template-columns: auto 1fr auto; gap: 7px; align-items: center;
+}
+.gpu-chip:hover { border-color: #765737; }
+.gpu-chip[aria-pressed="true"] { color: var(--cream); border-color: var(--amber); background: #24180e; box-shadow: inset 0 0 20px #b85e2e12; }
+.gpu-chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--good); }
+.gpu-chip .chip-name { font-size: 10px; white-space: nowrap; }
+.gpu-chip .chip-value { font-size: 10px; color: var(--amber); }
+.gpu-chip .mini { grid-column: 2 / 4; height: 2px; background: #35281c; overflow: hidden; }
+.gpu-chip .mini::after { content: ""; display: block; width: var(--load); height: 100%; background: linear-gradient(90deg,var(--rust),var(--amber)); }
+.dashboard { min-height: 0; padding: 18px; }
+.panel { border: 1px solid var(--line); border-radius: 11px; background: linear-gradient(180deg,#15120e,#100e0b); overflow: hidden; }
+.panel-label { padding: 10px 12px 0; color: var(--muted); font-size: 10px; letter-spacing: .11em; text-transform: uppercase; }
+.hero-value { font-size: clamp(44px, 8cqw, 94px); line-height: .9; letter-spacing: -.07em; font-weight: 700; color: var(--cream); }
+.hero-value small { font-size: .27em; letter-spacing: 0; color: var(--amber); }
+.hero-meta { display: flex; gap: 18px; color: var(--muted); font-size: 11px; }
+.hero-meta b { color: var(--ink); font-weight: 500; }
+.wave-wrap { position: relative; min-height: 180px; }
+.wave { width: 100%; height: 100%; display: block; }
+.wave-grid { position: absolute; inset: 0; pointer-events: none; background-image: linear-gradient(#e7a2430a 1px,transparent 1px),linear-gradient(90deg,#e7a24308 1px,transparent 1px); background-size: 100% 25%, 10% 100%; mask-image: linear-gradient(to right,transparent,#000 8%,#000); }
+.vitals { display: grid; gap: 9px; }
+.vital { padding: 12px; border: 1px solid #392d20; border-radius: 9px; background: #12100d; }
+.vital-head { display: flex; justify-content: space-between; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
+.vital-value { margin-top: 8px; color: var(--cream); font-size: 19px; }
+.vital-value small { color: var(--muted); font-size: 10px; }
+.meter { height: 4px; margin-top: 9px; background: #30261b; border-radius: 3px; overflow: hidden; }
+.meter i { display: block; height: 100%; width: var(--value); background: linear-gradient(90deg,var(--rust),var(--amber)); }
+.health {
+  display: flex; align-items: center; gap: 9px; min-height: 44px; padding: 0 13px;
+  border: 1px solid #344126; border-radius: 9px; background: #11150d; color: #c9d5a8; font-size: 12px;
+}
+.health .beacon { width: 7px; height: 7px; border-radius: 50%; background: var(--good); box-shadow: 0 0 12px #a8bd7b88; }
+.health.warn { border-color: #7b492e; background: #1a100c; color: #f1aa68; }
+.health.warn .beacon { background: var(--bad); box-shadow: 0 0 12px #e55b4588; }
+.footer {
+  min-height: 34px; display: flex; align-items: center; gap: 17px; padding: 0 15px;
+  border-top: 1px solid var(--line); color: var(--dim); font-size: 10px;
+}
+.footer kbd { color: var(--muted); background: transparent; font: inherit; }
+.footer span:last-child { margin-left: auto; }
+/* Variant A: flow-faithful centered instrument */
+.layout-a { display: grid; grid-template-columns: minmax(0,1fr) 250px; gap: 13px; height: 100%; }
+.layout-a .primary { padding: 17px 18px 12px; display: grid; grid-template-rows: auto auto 1fr auto; min-height: 430px; }
+.layout-a .vitals { grid-template-rows: repeat(4,1fr) auto; }
+/* Variant B: stage-like waveform and horizontal instruments */
+.layout-b { display: grid; grid-template-rows: minmax(300px,1fr) auto; gap: 12px; height: 100%; }
+.layout-b .primary { padding: 18px 20px 10px; display: grid; grid-template-columns: 220px 1fr; grid-template-rows: auto 1fr auto; column-gap: 22px; }
+.layout-b .primary .title-stack { grid-row: 1 / 3; display: flex; flex-direction: column; justify-content: center; }
+.layout-b .primary .wave-wrap { grid-column: 2; grid-row: 1 / 3; min-height: 280px; }
+.layout-b .title-stack .hero-meta { display: grid; gap: 6px; margin-top: 22px; }
+.layout-b .lower { display: grid; grid-template-columns: repeat(3,1fr) 1.3fr; gap: 9px; }
+/* Variant C: editorial instrument, number overlaps graph */
+.layout-c { height: 100%; display: grid; grid-template-columns: 1.4fr .8fr; gap: 12px; }
+.layout-c .primary { position: relative; min-height: 430px; padding: 18px; display: flex; flex-direction: column; }
+.layout-c .hero-value { position: absolute; z-index: 2; top: 55px; left: 28px; font-size: clamp(70px,12cqw,140px); text-shadow: 0 10px 35px #000; }
+.layout-c .wave-wrap { flex: 1; min-height: 340px; margin-top: 48px; }
+.layout-c .hero-meta { position: relative; z-index: 2; }
+.layout-c .side { display: grid; grid-template-rows: repeat(3,1fr) auto; gap: 9px; }
+.variant-title { color: var(--dim); font-size: 10px; margin-bottom: 8px; }
+.prototype-switcher {
+  position: fixed; z-index: 10; bottom: 18px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 6px; padding: 6px; border-radius: 999px;
+  background: #f4e8d2; color: #1b130c; box-shadow: 0 10px 40px #000b;
+}
+.prototype-switcher button {
+  border: 0; background: transparent; color: inherit; cursor: pointer; border-radius: 999px;
+  min-width: 34px; min-height: 34px;
+}
+.prototype-switcher button:hover, .prototype-switcher button:focus-visible { background: #d8b98a; outline: none; }
+.prototype-switcher output { min-width: 230px; text-align: center; font-size: 11px; font-weight: 700; }
+.scenarios { position: fixed; top: 12px; right: 14px; display: flex; gap: 4px; }
+.scenarios button { border: 1px solid #423527; background: #100e0b; color: var(--muted); border-radius: 6px; padding: 5px 8px; font-size: 10px; cursor: pointer; }
+.scenarios button[aria-pressed="true"] { color: var(--cream); border-color: var(--rust); }
+@container (max-width: 760px) {
+  .dashboard { padding: 11px; }
+  .layout-a, .layout-c { grid-template-columns: 1fr; }
+  .layout-a .vitals, .layout-c .side { grid-template-columns: repeat(3,1fr); grid-template-rows: auto auto; }
+  .layout-a .health, .layout-c .health { grid-column: 1 / -1; }
+  .layout-b .primary { grid-template-columns: 150px 1fr; }
+  .layout-b .lower { grid-template-columns: repeat(3,1fr); }
+  .layout-b .health { grid-column: 1 / -1; }
+  .host { display: none; }
+}
+@container (max-width: 520px) {
+  .terminal { min-height: 320px; }
+  .topbar { min-height: 38px; padding: 0 10px; }
+  .live, .clock { display: none; }
+  .gpu-strip { padding: 6px; }
+  .gpu-chip { min-width: 105px; padding: 5px 6px; }
+  .gpu-chip .mini { display: none; }
+  .dashboard { padding: 7px; }
+  .layout-a, .layout-b, .layout-c { display: block; }
+  .layout-a .primary, .layout-b .primary, .layout-c .primary { min-height: 240px; padding: 11px; display: block; }
+  .layout-b .primary .wave-wrap, .layout-c .wave-wrap { min-height: 145px; margin-top: 8px; }
+  .layout-c .hero-value { position: static; font-size: 48px; }
+  .wave-wrap { min-height: 145px; }
+  .hero-value { font-size: 48px; margin: 7px 0; }
+  .hero-meta { gap: 9px; font-size: 9px; }
+  .vitals, .layout-b .lower, .layout-c .side { display: grid; grid-template-columns: repeat(3,1fr); gap: 5px; margin-top: 6px; }
+  .vital { padding: 7px; }
+  .vital-value { font-size: 13px; }
+  .health { grid-column: 1 / -1; min-height: 34px; }
+  .footer { gap: 8px; padding: 0 8px; }
+  .footer .optional { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="prototype-note">Prototype — throwaway visual study</div>
+<div class="scenarios" aria-label="Telemetry scenario">
+  <button type="button" data-scenario="cook" aria-pressed="true">cooking</button>
+  <button type="button" data-scenario="throttle" aria-pressed="false">throttle</button>
+  <button type="button" data-scenario="sleep" aria-pressed="false">asleep</button>
+</div>
+<main class="terminal" aria-label="Gruflo terminal dashboard prototype">
+  <header class="topbar">
+    <div class="brand"><span class="hornmark" aria-hidden="true"><i></i></span><strong>gruflo</strong></div>
+    <span class="live">live · 250ms</span>
+    <span class="host">2 × AMD Instinct MI300X · ROCm 7.1</span>
+    <time class="clock">22:14:07</time>
+  </header>
+  <nav class="gpu-strip" aria-label="GPU selection">
+    <button class="gpu-chip" type="button" aria-pressed="true" style="--load:87%"><span class="dot"></span><span class="chip-name">GPU 0 · MI300X</span><span class="chip-value">87%</span><span class="mini"></span></button>
+    <button class="gpu-chip" type="button" aria-pressed="false" style="--load:12%"><span class="dot"></span><span class="chip-name">GPU 1 · MI300X</span><span class="chip-value">12%</span><span class="mini"></span></button>
+    <button class="gpu-chip" type="button" aria-pressed="false" style="--load:64%"><span class="dot"></span><span class="chip-name">GPU 2 · MI300X</span><span class="chip-value">64%</span><span class="mini"></span></button>
+    <button class="gpu-chip" type="button" aria-pressed="false" style="--load:43%"><span class="dot"></span><span class="chip-name">GPU 3 · MI300X</span><span class="chip-value">43%</span><span class="mini"></span></button>
+  </nav>
+  <section class="dashboard" id="dashboard" aria-live="polite"></section>
+  <footer class="footer"><span><kbd>← →</kbd> gpu</span><span><kbd>p</kbd> processes</span><span class="optional"><kbd>d</kbd> details</span><span class="optional"><kbd>m</kbd> mode</span><span><kbd>?</kbd> help</span><span class="footer-health">no active limits or faults</span></footer>
+</main>
+<div class="prototype-switcher" aria-label="Prototype variant switcher">
+  <button id="prev" type="button" aria-label="Previous prototype variant">←</button>
+  <output id="variant-label" aria-live="polite"></output>
+  <button id="next" type="button" aria-label="Next prototype variant">→</button>
+</div>
+<script>
+const variants = {
+  A: { name: 'Flow faithful', cls: 'layout-a' },
+  B: { name: 'Wide stage', cls: 'layout-b' },
+  C: { name: 'Editorial instrument', cls: 'layout-c' }
+};
+const scenarios = {
+  cook: { value: 87, memory: 89, temp: 72, power: 281, clock: '2.3', trend: '↗ rising', peak: 99, health: 'no active limits or faults', warn: false },
+  throttle: { value: 99, memory: 92, temp: 94, power: 319, clock: '1.7', trend: '→ steady', peak: 99, health: 'thermal throttle · hotspot 94 / 95°C', warn: true },
+  sleep: { value: 0, memory: 0, temp: null, power: 0, clock: '—', trend: '— asleep', peak: 99, health: 'GPU asleep · telemetry paused', warn: false }
+};
+const gpuLoads = [87, 12, 64, 43];
+let scenarioKey = 'cook';
+let selectedGpu = 0;
+let phase = 0;
+const dashboard = document.querySelector('#dashboard');
+function currentVariant() {
+  const key = new URLSearchParams(location.search).get('variant')?.toUpperCase();
+  return variants[key] ? key : 'A';
+}
+function currentState() {
+  const state = { ...scenarios[scenarioKey] };
+  if (scenarioKey === 'cook') state.value = gpuLoads[selectedGpu];
+  return state;
+}
+function vital(label, value, suffix, pct) {
+  return `<article class="vital"><div class="vital-head"><span>${label}</span><span>live</span></div><div class="vital-value">${value}<small>${suffix}</small></div><div class="meter" aria-hidden="true"><i style="--value:${pct}%"></i></div></article>`;
+}
+function health(s) { return `<div class="health ${s.warn ? 'warn' : ''}" role="status"><span class="beacon" aria-hidden="true"></span>${s.health}</div>`; }
+function activityMeta(s) {
+  return `<div class="hero-meta"><span>trend <b>${s.trend}</b></span><span>peak <b>${s.peak}%</b></span><span>window <b>60s</b></span></div>`;
+}
+function wave() {
+  return `<div class="wave-wrap"><canvas class="wave" role="img" aria-label="GPU activity over the last 60 seconds"></canvas><div class="wave-grid"></div></div>`;
+}
+function graphPanel(s) {
+  return `<article class="panel primary"><div class="panel-label">GPU activity · GPU ${selectedGpu}</div><div class="hero-value">${s.value}<small>%</small></div>${wave()}${activityMeta(s)}</article>`;
+}
+function stagePanel(s) {
+  return `<article class="panel primary"><div class="title-stack"><div class="panel-label">GPU activity · GPU ${selectedGpu}</div><div class="hero-value">${s.value}<small>%</small></div>${activityMeta(s)}</div>${wave()}</article>`;
+}
+function render() {
+  const k = currentVariant(); const v = variants[k]; const s = currentState();
+  const memory = vital('VRAM', `${(24*s.memory/100).toFixed(1)} / 24`, ' GiB', s.memory);
+  const temp = vital('hotspot', s.temp ?? '—', s.temp == null ? ' asleep' : ' / 95°C', s.temp ?? 0);
+  const power = vital('socket power', s.power, ' / 320W', s.power / 3.2);
+  const clock = vital('gfx clock', s.clock, s.clock === '—' ? '' : ' GHz', s.clock === '—' ? 0 : Number(s.clock)/2.8*100);
+  let html = '';
+  if (k === 'A') html = `<div class="${v.cls}">${graphPanel(s)}<aside class="vitals">${memory}${temp}${power}${clock}${health(s)}</aside></div>`;
+  if (k === 'B') html = `<div class="${v.cls}">${stagePanel(s)}<div class="lower">${memory}${temp}${power}${health(s)}</div></div>`;
+  if (k === 'C') html = `<div class="${v.cls}">${graphPanel(s)}<aside class="side">${memory}${temp}${power}${clock}${health(s)}</aside></div>`;
+  dashboard.innerHTML = `<div class="variant-title">${k} — ${v.name}</div>${html}`;
+  document.querySelector('#variant-label').textContent = `${k} — ${v.name}`;
+  document.querySelector('.footer-health').textContent = s.health;
+  document.querySelectorAll('.gpu-chip').forEach((chip, index) => {
+    const value = scenarioKey === 'sleep' ? '—' : `${gpuLoads[index]}%`;
+    chip.querySelector('.chip-value').textContent = value;
+    chip.querySelector('.dot').style.background = scenarioKey === 'sleep' ? 'var(--dim)' : scenarioKey === 'throttle' && index === selectedGpu ? 'var(--bad)' : 'var(--good)';
+  });
+  drawWaves();
+}
+function drawWaves() {
+  document.querySelectorAll('canvas.wave').forEach(canvas => {
+    const rect = canvas.getBoundingClientRect();
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    canvas.width = Math.max(1, rect.width*dpr); canvas.height = Math.max(1, rect.height*dpr);
+    const ctx = canvas.getContext('2d'); ctx.scale(dpr,dpr);
+    const w=rect.width,h=rect.height,s=currentState();
+    const points=[];
+    for(let x=0;x<=w;x+=3){
+      const t=x/w*15+phase;
+      const base=scenarioKey==='sleep'?2:s.value;
+      const noise=(Math.sin(t*1.9)*7+Math.sin(t*.71+1.2)*9+Math.sin(t*4.1)*3);
+      points.push([x,h-(Math.max(0,Math.min(100,base+noise))/100)*(h*.78)-h*.08]);
+    }
+    const fill=ctx.createLinearGradient(0,0,0,h); fill.addColorStop(0,'rgba(231,162,67,.36)'); fill.addColorStop(1,'rgba(184,94,46,0)');
+    ctx.beginPath(); ctx.moveTo(0,h); points.forEach(p=>ctx.lineTo(...p)); ctx.lineTo(w,h); ctx.fillStyle=fill; ctx.fill();
+    ctx.beginPath(); points.forEach((p,i)=>i?ctx.lineTo(...p):ctx.moveTo(...p));
+    const stroke=ctx.createLinearGradient(0,0,w,0); stroke.addColorStop(0,'#82401f'); stroke.addColorStop(.55,'#d47f32'); stroke.addColorStop(1,'#ffd27b');
+    ctx.strokeStyle=stroke;ctx.lineWidth=2;ctx.stroke();
+  });
+}
+function setVariant(direction) {
+  const keys=Object.keys(variants); let i=keys.indexOf(currentVariant()); i=(i+direction+keys.length)%keys.length;
+  const url=new URL(location);url.searchParams.set('variant',keys[i]);history.replaceState({},'',url);render();
+}
+document.querySelector('#prev').addEventListener('click',()=>setVariant(-1));
+document.querySelector('#next').addEventListener('click',()=>setVariant(1));
+document.addEventListener('keydown',e=>{if(e.target.closest('button,input,textarea,[contenteditable]'))return;if(e.key==='ArrowLeft')setVariant(-1);if(e.key==='ArrowRight')setVariant(1);});
+document.querySelectorAll('.gpu-chip').forEach((btn,index)=>btn.addEventListener('click',()=>{selectedGpu=index;document.querySelectorAll('.gpu-chip').forEach(b=>b.setAttribute('aria-pressed',String(b===btn)));render();}));
+document.querySelectorAll('[data-scenario]').forEach(btn=>btn.addEventListener('click',()=>{scenarioKey=btn.dataset.scenario;document.querySelectorAll('[data-scenario]').forEach(b=>b.setAttribute('aria-pressed',String(b===btn)));render();}));
+render();
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+if(!reduce)setInterval(()=>{phase+=.08;drawWaves();},125);
+addEventListener('resize',drawWaves);
+setInterval(()=>{document.querySelector('.clock').textContent=new Date().toLocaleTimeString('en-GB');},1000);
+</script>
+</body>
+</html>
