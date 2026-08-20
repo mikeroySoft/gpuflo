@@ -93,9 +93,8 @@ button { font: inherit; }
 .hero-value { font-size: clamp(44px, 8cqw, 94px); line-height: .9; letter-spacing: -.07em; font-weight: 700; color: var(--cream); }
 .hero-value small { font-size: .27em; letter-spacing: 0; color: var(--amber); }
 .hero-meta { display: flex; gap: 18px; color: var(--muted); font-size: 11px; }
-.hero-meta b { color: var(--ink); font-weight: 500; }
-.wave-wrap { position: relative; min-height: 180px; }
-.wave { width: 100%; height: 100%; display: block; }
+.wave-wrap { position: relative; min-height: 180px; overflow: hidden; }
+.wave { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .wave-grid { position: absolute; inset: 0; pointer-events: none; background-image: linear-gradient(#e7a2430a 1px,transparent 1px),linear-gradient(90deg,#e7a24308 1px,transparent 1px); background-size: 100% 25%, 10% 100%; mask-image: linear-gradient(to right,transparent,#000 8%,#000); }
 .vitals { display: grid; gap: 9px; }
 .vital { padding: 12px; border: 1px solid #392d20; border-radius: 9px; background: #12100d; }
