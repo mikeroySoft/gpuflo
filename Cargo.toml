@@ -1,0 +1,10 @@
+[package]
+name = "gruflo-prototype"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+anyhow = "1"
+crossterm = "0.29"
+ratatui = "0.30"
