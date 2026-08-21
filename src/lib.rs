@@ -9,6 +9,9 @@
 mod cli;
 mod config;
 mod model;
+mod output;
+mod persist;
+mod state;
 
 pub use model::{
     Health, HealthCategory, InvalidPciBdf, Memory, MemoryPool, Observation, ObservationState,
