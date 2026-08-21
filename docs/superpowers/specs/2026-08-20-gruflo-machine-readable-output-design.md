@@ -310,7 +310,7 @@ Non-interactive modes use these exits:
 | --- | --- |
 | `0` | Contracted output completed, including partial telemetry and a downstream broken pipe. |
 | `1` | No physical GPU was discoverable, no snapshot could be produced, or a fatal collection, serialization, or non-pipe output failure occurred. |
-| `2` | Command-line usage error. |
+| `2` | Command-line usage or startup configuration error. |
 | `130` | Interrupted by SIGINT. |
 
 Fatal diagnostics go to stderr. JSON stdout contains snapshots only. A broken pipe is silent and exits `0`, so `gruflo --json-stream | head` behaves as a successful Unix pipeline.
