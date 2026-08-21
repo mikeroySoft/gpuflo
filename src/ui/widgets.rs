@@ -197,7 +197,7 @@ fn render_tiny(frame: &mut Frame<'_>, view: &View<'_>, area: Rect) {
     let palette = styler.palette;
     let gpu = view.gpu;
     let sampled_at = view.model.snapshot.sampled_at;
-    let label = format!("{} · {}", short_name(&gpu.name), gpu.index);
+    let label = format!("{} · {}", compact_name(&gpu.name), gpu.index);
 
     let mut spans = vec![
         Span::styled("gruflo", styler.bold(palette.fg)),
@@ -1004,26 +1004,21 @@ fn render_help(
 // Text helpers
 // ---------------------------------------------------------------------------
 
-/// Compact model label: known marketing prefixes removed, capped for the
-/// overview strip.
+/// GPU model label for overview/tiny surfaces. Preserve the locally resolved
+/// marketing name; layout/windowing handles narrow terminals.
 fn short_name(name: &str) -> String {
-    let mut trimmed = name.trim();
-    loop {
-        let mut stripped = false;
-        for prefix in ["AMD ", "Radeon ", "Instinct "] {
-            if let Some(rest) = trimmed.strip_prefix(prefix) {
-                trimmed = rest.trim_start();
-                stripped = true;
-            }
-        }
-        if !stripped {
+    clip(name.trim(), 32)
+}
+
+fn compact_name(name: &str) -> String {
+    let mut name = name.trim();
+    for prefix in ["AMD Radeon ", "AMD Instinct ", "AMD "] {
+        if let Some(rest) = name.strip_prefix(prefix) {
+            name = rest;
             break;
         }
     }
-    if trimmed.is_empty() {
-        trimmed = name.trim();
-    }
-    clip(trimmed, 16)
+    clip(name, 14)
 }
 
 /// Truncates to `max` characters with a trailing ellipsis.
