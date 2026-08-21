@@ -1,0 +1,9 @@
+kernel=Linux 7.1.8-1-cachyos x86_64 GNU/Linux
+os_PRETTY_NAME="CachyOS"
+os_ID=cachyos
+render_group=no
+video_group=yes
+workload=hip
+python=Python 3.14.7
+hipcc=HIP version: 7.14.60850-0000000
+amd_smi=AMDSMI Tool: 26.5.0+8b2f7145 | AMDSMI Library version: 26.5.0 | ROCm version: 7.14.0 | amdgpu version: N/A | ionic version: N/A

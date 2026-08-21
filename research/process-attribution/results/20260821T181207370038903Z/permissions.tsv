@@ -1,0 +1,3 @@
+path	mode	group_gid	readable	writable
+/dev/kfd	666	987	yes	yes
+/dev/dri/renderD128	666	987	yes	yes

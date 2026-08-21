@@ -1,0 +1,13 @@
+status=complete
+workload=hip
+association=drm fdinfo
+advancing_engine_fields=none observed
+kfd_cu_occupancy=not observed
+cross_user_traversal=not tested
+mean_full_scan_ms=838.755
+scan_context=workload_active
+baseline_iterations_per_second=2875.266667
+polled_iterations_per_second=2875.430000
+throughput_delta_percent=0.006
+perturbation_budget=pass
+privacy=hostname, username, command lines, serials, UUIDs, and unrelated process contents omitted

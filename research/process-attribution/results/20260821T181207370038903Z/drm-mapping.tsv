@@ -1,0 +1,2 @@
+render_node	pci_bdf	pci_id	driver
+renderD128	0000:03:00.0	1002:7551	amdgpu

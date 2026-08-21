@@ -1,0 +1,20 @@
+file	counters_23334/faults
+value	0
+file	counters_23334/page_in
+value	15022
+file	counters_23334/page_out
+value	0
+file	pasid
+value	0
+file	queues/0/gpuid
+value	23334file	queues/0/size
+value	4096file	queues/0/type
+value	0file	queues/1/gpuid
+value	23334file	queues/1/size
+value	1048576file	queues/1/type
+value	0file	sdma_23334
+value	0
+file	stats_23334/evicted_ms
+value	0
+file	vram_23334
+value	409726976

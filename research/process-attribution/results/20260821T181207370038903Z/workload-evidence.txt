@@ -1,0 +1,4 @@
+workload=hip
+elapsed_seconds=25.0002
+iterations=71692
+iterations_per_second=2867.66
