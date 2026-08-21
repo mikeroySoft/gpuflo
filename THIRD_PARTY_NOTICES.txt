@@ -1,0 +1,185 @@
+Third-party notices for gruflo
+
+gruflo is distributed under the MIT license (see LICENSE).
+The x86_64-unknown-linux-gnu binary statically links the following Rust
+crates, listed with their declared SPDX license expressions and
+upstream sources. Full license texts are available from each listed
+source. No code was copied or closely translated from other
+projects; the crates below are ordinary Cargo dependencies.
+
+- allocator-api2 0.2.21 — MIT OR Apache-2.0
+  https://github.com/zakarumych/allocator-api2
+- bitflags 2.13.1 — MIT OR Apache-2.0
+  https://github.com/bitflags/bitflags
+- castaway 0.2.4 — MIT
+  https://github.com/sagebind/castaway
+- cfg-if 1.0.4 — MIT OR Apache-2.0
+  https://github.com/rust-lang/cfg-if
+- compact_str 0.9.1 — MIT
+  https://github.com/ParkMyCar/compact_str
+- convert_case 0.10.0 — MIT
+  https://github.com/rutrum/convert-case
+- critical-section 1.2.0 — MIT OR Apache-2.0
+  https://github.com/rust-embedded/critical-section
+- crossbeam-channel 0.5.16 — MIT OR Apache-2.0
+  https://github.com/crossbeam-rs/crossbeam
+- crossbeam-utils 0.8.22 — MIT OR Apache-2.0
+  https://github.com/crossbeam-rs/crossbeam
+- crossterm 0.29.0 — MIT
+  https://github.com/crossterm-rs/crossterm
+- darling 0.24.1 — MIT
+  https://github.com/TedDriggs/darling
+- darling_core 0.24.1 — MIT
+  https://github.com/TedDriggs/darling
+- darling_macro 0.24.1 — MIT
+  https://github.com/TedDriggs/darling
+- deranged 0.5.8 — MIT OR Apache-2.0
+  https://github.com/jhpratt/deranged
+- derive_more 2.1.1 — MIT
+  https://github.com/JelteF/derive_more
+- derive_more-impl 2.1.1 — MIT
+  https://github.com/JelteF/derive_more
+- document-features 0.2.12 — MIT OR Apache-2.0
+  https://github.com/slint-ui/document-features
+- either 1.18.0 — MIT OR Apache-2.0
+  https://github.com/rayon-rs/either
+- equivalent 1.0.2 — Apache-2.0 OR MIT
+  https://github.com/indexmap-rs/equivalent
+- errno 0.3.14 — MIT OR Apache-2.0
+  https://github.com/lambda-fairy/rust-errno
+- foldhash 0.2.0 — Zlib
+  https://github.com/orlp/foldhash
+- hashbrown 0.16.1 — MIT OR Apache-2.0
+  https://github.com/rust-lang/hashbrown
+- hashbrown 0.17.1 — MIT OR Apache-2.0
+  https://github.com/rust-lang/hashbrown
+- heck 0.5.0 — MIT OR Apache-2.0
+  https://github.com/withoutboats/heck
+- ident_case 1.0.1 — MIT/Apache-2.0
+  https://github.com/TedDriggs/ident_case
+- indoc 2.0.7 — MIT OR Apache-2.0
+  https://github.com/dtolnay/indoc
+- instability 0.3.13 — MIT
+  https://github.com/ratatui/instability
+- itertools 0.14.0 — MIT OR Apache-2.0
+  https://github.com/rust-itertools/itertools
+- itoa 1.0.18 — MIT OR Apache-2.0
+  https://github.com/dtolnay/itoa
+- kasuari 0.4.12 — MIT OR Apache-2.0
+  https://github.com/ratatui/kasuari
+- lexopt 0.3.2 — MIT
+  https://github.com/blyxxyz/lexopt
+- libc 0.2.189 — MIT OR Apache-2.0
+  https://github.com/rust-lang/libc
+- libloading 0.8.9 — ISC
+  https://github.com/nagisa/rust_libloading/
+- line-clipping 0.3.8 — MIT OR Apache-2.0
+  https://github.com/ratatui/line-clipping
+- linux-raw-sys 0.12.1 — Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT
+  https://github.com/sunfishcode/linux-raw-sys
+- litrs 1.0.0 — MIT OR Apache-2.0
+  https://github.com/LukasKalbertodt/litrs
+- lock_api 0.4.14 — MIT OR Apache-2.0
+  https://github.com/Amanieu/parking_lot
+- log 0.4.33 — MIT OR Apache-2.0
+  https://github.com/rust-lang/log
+- lru 0.18.2 — MIT
+  https://github.com/jeromefroe/lru-rs.git
+- memchr 2.8.3 — Unlicense OR MIT
+  https://github.com/BurntSushi/memchr
+- mio 1.2.2 — MIT
+  https://github.com/tokio-rs/mio
+- num-conv 0.2.2 — MIT OR Apache-2.0
+  https://github.com/jhpratt/num-conv
+- num_threads 0.1.7 — MIT OR Apache-2.0
+  https://github.com/jhpratt/num_threads
+- parking_lot 0.12.5 — MIT OR Apache-2.0
+  https://github.com/Amanieu/parking_lot
+- parking_lot_core 0.9.12 — MIT OR Apache-2.0
+  https://github.com/Amanieu/parking_lot
+- powerfmt 0.2.0 — MIT OR Apache-2.0
+  https://github.com/jhpratt/powerfmt
+- proc-macro2 1.0.107 — MIT OR Apache-2.0
+  https://github.com/dtolnay/proc-macro2
+- quote 1.0.47 — MIT OR Apache-2.0
+  https://github.com/dtolnay/quote
+- ratatui 0.30.2 — MIT
+  https://github.com/ratatui/ratatui
+- ratatui-core 0.1.2 — MIT
+  https://github.com/ratatui/ratatui
+- ratatui-crossterm 0.1.2 — MIT
+  https://github.com/ratatui/ratatui
+- ratatui-macros 0.7.2 — MIT
+  https://github.com/ratatui/ratatui
+- ratatui-widgets 0.3.2 — MIT
+  https://github.com/ratatui/ratatui
+- rustix 1.1.4 — Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT
+  https://github.com/bytecodealliance/rustix
+- rustversion 1.0.23 — MIT OR Apache-2.0
+  https://github.com/dtolnay/rustversion
+- ryu 1.0.23 — Apache-2.0 OR BSL-1.0
+  https://github.com/dtolnay/ryu
+- scopeguard 1.2.0 — MIT OR Apache-2.0
+  https://github.com/bluss/scopeguard
+- serde 1.0.229 — MIT OR Apache-2.0
+  https://github.com/serde-rs/serde
+- serde_core 1.0.229 — MIT OR Apache-2.0
+  https://github.com/serde-rs/serde
+- serde_derive 1.0.229 — MIT OR Apache-2.0
+  https://github.com/serde-rs/serde
+- serde_json 1.0.151 — MIT OR Apache-2.0
+  https://github.com/serde-rs/json
+- serde_spanned 1.1.1 — MIT OR Apache-2.0
+  https://github.com/toml-rs/toml
+- signal-hook 0.3.18 — Apache-2.0/MIT
+  https://github.com/vorner/signal-hook
+- signal-hook-mio 0.2.5 — MIT OR Apache-2.0
+  https://github.com/vorner/signal-hook
+- signal-hook-registry 1.4.8 — MIT OR Apache-2.0
+  https://github.com/vorner/signal-hook
+- smallvec 1.15.2 — MIT OR Apache-2.0
+  https://github.com/servo/rust-smallvec
+- static_assertions 1.1.0 — MIT OR Apache-2.0
+  https://github.com/nvzqz/static-assertions-rs
+- strsim 0.11.1 — MIT
+  https://github.com/rapidfuzz/strsim-rs
+- strum 0.28.0 — MIT
+  https://github.com/Peternator7/strum
+- strum_macros 0.28.0 — MIT
+  https://github.com/Peternator7/strum
+- syn 2.0.119 — MIT OR Apache-2.0
+  https://github.com/dtolnay/syn
+- syn 3.0.3 — MIT OR Apache-2.0
+  https://github.com/dtolnay/syn
+- thiserror 2.0.20 — MIT OR Apache-2.0
+  https://github.com/dtolnay/thiserror
+- thiserror-impl 2.0.20 — MIT OR Apache-2.0
+  https://github.com/dtolnay/thiserror
+- time 0.3.55 — MIT OR Apache-2.0
+  https://github.com/time-rs/time
+- time-core 0.1.9 — MIT OR Apache-2.0
+  https://github.com/time-rs/time
+- time-macros 0.2.32 — MIT OR Apache-2.0
+  https://github.com/time-rs/time
+- toml 0.9.12+spec-1.1.0 — MIT OR Apache-2.0
+  https://github.com/toml-rs/toml
+- toml_datetime 0.7.5+spec-1.1.0 — MIT OR Apache-2.0
+  https://github.com/toml-rs/toml
+- toml_parser 1.1.3+spec-1.1.0 — MIT OR Apache-2.0
+  https://github.com/toml-rs/toml
+- toml_writer 1.1.2+spec-1.1.0 — MIT OR Apache-2.0
+  https://github.com/toml-rs/toml
+- unicode-ident 1.0.24 — (MIT OR Apache-2.0) AND Unicode-3.0
+  https://github.com/dtolnay/unicode-ident
+- unicode-segmentation 1.13.3 — MIT OR Apache-2.0
+  https://github.com/unicode-rs/unicode-segmentation
+- unicode-truncate 2.0.1 — MIT OR Apache-2.0
+  https://github.com/Aetf/unicode-truncate
+- unicode-width 0.2.2 — MIT OR Apache-2.0
+  https://github.com/unicode-rs/unicode-width
+- winnow 0.7.15 — MIT
+  https://github.com/winnow-rs/winnow
+- winnow 1.0.4 — MIT
+  https://github.com/winnow-rs/winnow
+- zmij 1.0.23 — MIT
+  https://github.com/dtolnay/zmij

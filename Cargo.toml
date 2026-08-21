@@ -9,6 +9,7 @@ license = "MIT"
 readme = "README.md"
 keywords = ["amd", "gpu", "amdgpu", "telemetry", "tui"]
 categories = ["command-line-utilities", "visualization"]
+include = ["/src", "/LICENSE", "/README.md", "/THIRD_PARTY_NOTICES.txt"]
 
 [dependencies]
 crossbeam-channel = "0.5.16"

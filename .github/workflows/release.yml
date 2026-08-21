@@ -1,0 +1,57 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: build and publish the x86_64 archive
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: x86_64-unknown-linux-gnu
+
+      # The deterministic release gate reruns on the immutable tag.
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - run: cargo test --all-targets --locked
+      - run: python3 scripts/notices.py && git diff --exit-code THIRD_PARTY_NOTICES.txt
+      - run: cargo package --locked --allow-dirty
+
+      - name: build the release binary
+        run: cargo build --release --locked --target x86_64-unknown-linux-gnu
+
+      - name: assemble the archive
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME}"
+          test "v$(cargo pkgid | sed 's/.*#//')" = "${VERSION}" \
+            || { echo "tag ${VERSION} does not match Cargo.toml"; exit 1; }
+          NAME="gruflo-${VERSION}-x86_64-unknown-linux-gnu"
+          mkdir "${NAME}"
+          cp target/x86_64-unknown-linux-gnu/release/gruflo \
+             LICENSE THIRD_PARTY_NOTICES.txt README.md "${NAME}/"
+          tar -czf "${NAME}.tar.gz" "${NAME}"
+          sha256sum "${NAME}.tar.gz" > SHA256SUMS
+          # The archived binary must identify the release.
+          "./${NAME}/gruflo" --version | grep -F "${VERSION#v}"
+
+      - name: publish the GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            gruflo-*.tar.gz
+            SHA256SUMS
+
+      # crates.io publication stays a manual, credentialed step:
+      # cargo publish --locked
