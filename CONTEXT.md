@@ -16,6 +16,10 @@ The device-level GFX activity reported by the selected telemetry source. It is n
 
 A source-backed limit, throttle, fault, degradation, or telemetry-availability condition expressed as a factual sentence. It is not a composite score.
 
+## Hardware qualification
+
+Evidence from running the release candidate on a representative physical AMD GPU telemetry regime. It is stronger than fixture validation and may be `qualified`, `fixture-validated`, or `unverified` for each regime.
+
 ## Mode
 
 The full always-visible instrument cluster for one selected physical GPU: activity, memory occupancy, core supporting instruments, and the highest-priority health condition.
