@@ -716,6 +716,8 @@ fn overlay_box(
 fn render_processes(frame: &mut Frame<'_>, view: &View<'_>, area: Rect) {
     let styler = &view.styler;
     let palette = styler.palette;
+    let box_width = area.width.min(112);
+    let column_widths = process_column_widths(box_width.saturating_sub(6) as usize);
     let mut lines: Vec<Line<'_>> = Vec::new();
     match &view.model.processes {
         None => lines.push(Line::styled("scanning processes…", styler.fg(palette.dim))),
@@ -735,15 +737,16 @@ fn render_processes(frame: &mut Frame<'_>, view: &View<'_>, area: Rect) {
         )),
         Some(overlay) => {
             lines.push(Line::styled(
-                format!(
-                    "{:>7} {:<14} {:<12} {:>9} {:>9} {:>12} {}",
-                    "PID", "name", "GPU/XCP", "VRAM", "GTT", "KFD", "container"
+                process_row(
+                    ["PID", "name", "GPU/XCP", "VRAM", "GTT", "KFD", "container"]
+                        .map(str::to_owned),
+                    column_widths,
                 ),
                 styler.fg(palette.muted),
             ));
             for row in &overlay.rows {
                 lines.push(Line::styled(
-                    process_line(row, overlay, view.model),
+                    process_line(row, overlay, view.model, column_widths),
                     styler.fg(palette.fg),
                 ));
             }
@@ -772,13 +775,18 @@ fn render_processes(frame: &mut Frame<'_>, view: &View<'_>, area: Rect) {
     }
 
     let height = (lines.len() as u16).saturating_add(2);
-    let inner = overlay_box(frame, styler, area, 96, height, " processes ");
+    let inner = overlay_box(frame, styler, area, box_width, height, " processes ");
     frame.render_widget(Paragraph::new(lines), inner);
 }
 
-fn process_line(row: &ProcessRow, overlay: &ProcessOverlay, model: &RenderModel) -> String {
+fn process_line(
+    row: &ProcessRow,
+    overlay: &ProcessOverlay,
+    model: &RenderModel,
+    widths: [usize; 7],
+) -> String {
     let name = match &row.name {
-        Reading::Value(name) => clip(name, 16),
+        Reading::Value(name) => name.clone(),
         other => format::reading_phrase(other).to_owned(),
     };
     let gpu = row
@@ -808,15 +816,49 @@ fn process_line(row: &ProcessRow, overlay: &ProcessOverlay, model: &RenderModel)
     let vram = memory_cell(&row.fdinfo_vram_bytes);
     let gtt = memory_cell(&row.fdinfo_gtt_bytes);
     let kfd = memory_cell(&row.kfd_vram_bytes);
-    let container = row
-        .container
-        .as_deref()
-        .map(|container| clip(container, 12))
-        .unwrap_or_else(|| "—".to_owned());
-    format!(
-        "{:>7} {name:<14} {gpu:<12} {vram:>9} {gtt:>9} {kfd:>12} {container}",
-        row.pid
+    let container = row.container.clone().unwrap_or_else(|| "—".to_owned());
+    process_row(
+        [row.pid.to_string(), name, gpu, vram, gtt, kfd, container],
+        widths,
     )
+}
+
+pub(super) fn process_column_widths(total: usize) -> [usize; 7] {
+    const GAP_TOTAL: usize = 2 * 6;
+    let content = total.saturating_sub(GAP_TOTAL);
+    let pid = content.min(7);
+    let remaining = content.saturating_sub(pid);
+    let name = (remaining / 6).saturating_add(3).min(remaining);
+    let remaining = remaining.saturating_sub(name);
+    let base = remaining / 5;
+    let extra = remaining % 5;
+    let mut widths = [base; 7];
+    widths[0] = pid;
+    widths[1] = name;
+    for width in widths.iter_mut().skip(2).take(extra) {
+        *width += 1;
+    }
+    widths
+}
+
+fn process_row(cells: [String; 7], widths: [usize; 7]) -> String {
+    cells
+        .into_iter()
+        .zip(widths)
+        .enumerate()
+        .map(|(index, (cell, width))| {
+            if width == 0 {
+                return String::new();
+            }
+            let cell = clip(&cell, width);
+            if matches!(index, 0 | 3 | 4 | 5) {
+                format!("{cell:>width$}")
+            } else {
+                format!("{cell:<width$}")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("  ")
 }
 
 /// IEC memory cell: value, `—` for structural absence, or the exact

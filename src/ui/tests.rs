@@ -517,6 +517,16 @@ fn escape_closes_topmost_modal_before_quitting() {
 // ---------------------------------------------------------------------------
 
 #[test]
+fn process_columns_share_available_width_evenly() {
+    let widths = widgets::process_column_widths(106);
+    assert_eq!(widths.iter().sum::<usize>() + 12, 106);
+    let data = &widths[2..];
+    assert!(data.iter().max().unwrap() - data.iter().min().unwrap() <= 1);
+    assert_eq!(widths[0], 7);
+    assert_eq!(widths[1], 17);
+}
+
+#[test]
 fn process_overlay_lists_honest_attribution() {
     let mut state = state_with_model(true);
     state.show_processes = true;
