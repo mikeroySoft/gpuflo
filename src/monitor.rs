@@ -580,7 +580,10 @@ impl Coordinator {
     fn run(&mut self) {
         let start = Instant::now();
         let mut next_fast = start;
-        let mut next_production = start + FAST_CADENCE;
+        // Production runs half a cadence after each fast request so a
+        // published snapshot carries the just-collected observations rather
+        // than the previous tick's.
+        let mut next_production = start + FAST_CADENCE + FAST_CADENCE / 2;
         let mut next_slow = start + Duration::from_millis(50);
         let mut next_process = start;
         let mut next_rediscovery = start + REDISCOVERY_CADENCE;
