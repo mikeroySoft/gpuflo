@@ -17,11 +17,11 @@ Gruflo observes GPU behavior only. It does not connect to inference engines or i
 - Busy is successful. High activity and well-packed memory are not failures.
 - Health statements must name source-backed conditions; no opaque score.
 - Missing telemetry is information, not zero.
-- One selected physical GPU owns the full hero view.
+- One selected physical GPU owns the full mode.
 - Secondary diagnosis stays one keypress away.
 - The same metric meaning must serve every TUI mode and later machine-readable outputs.
 
-## Hero view
+## Mode
 
 ### GPU activity
 
@@ -83,7 +83,7 @@ The health sentence may use throttle/violation state, thermal limits, ECC/RAS, b
 
 ## Multiple GPUs and partitions
 
-The full hero describes one selected physical GPU. A compact overview strip shows every physical GPU with:
+The full mode describes one selected physical GPU. A compact overview strip shows every physical GPU with:
 
 - identity or short model label;
 - activity;

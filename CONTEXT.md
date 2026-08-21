@@ -16,9 +16,9 @@ The device-level GFX activity reported by the selected telemetry source. It is n
 
 A source-backed limit, throttle, fault, degradation, or telemetry-availability condition expressed as a factual sentence. It is not a composite score.
 
-## Hero view
+## Mode
 
-The minimal always-visible instrument cluster for one selected physical GPU: activity, memory occupancy, core supporting instruments, and the highest-priority health condition.
+The full always-visible instrument cluster for one selected physical GPU: activity, memory occupancy, core supporting instruments, and the highest-priority health condition.
 
 ## Memory occupancy
 
