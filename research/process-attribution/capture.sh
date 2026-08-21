@@ -292,7 +292,7 @@ capture_kfd() {
             relative="${file#"$root"/}"
             printf 'file\t%s\n' "$relative"
             if [[ -r "$file" ]]; then
-                sed -n '1,200p' "$file" | sed 's/^/value\t/'
+                awk '{print "value\t" $0}' "$file"
             else
                 printf 'state\tpermission_denied\n'
             fi
@@ -366,7 +366,7 @@ summarize() {
     [[ -n "$advancing" ]] || advancing="none observed"
 
     grep -q $'\tdrm-pdev\t' "$STAGING/fdinfo-after.txt" && has_drm=true
-    grep -q '^file\t' "$STAGING/kfd-after.txt" && has_kfd=true
+    grep -q $'^file\t' "$STAGING/kfd-after.txt" && has_kfd=true
     if [[ "$has_drm" == true && "$has_kfd" == true ]]; then
         association="drm fdinfo, KFD process tree"
     elif [[ "$has_drm" == true ]]; then

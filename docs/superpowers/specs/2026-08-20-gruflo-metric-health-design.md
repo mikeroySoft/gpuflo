@@ -120,12 +120,11 @@ The process overlay is secondary to physical telemetry. For each process, show o
 - PID;
 - process name when permitted;
 - associated GPU or partition;
-- attributed GPU memory;
-- engine-time activity only if live ROCm validation proves it reliable.
+- attributed GPU memory.
 
 Sort primarily by attributed GPU memory. When names or process data require additional permissions, show the privilege limitation rather than hiding rows.
 
-Do not show per-process GPU-utilization percentages: no selected telemetry layer provides them reliably. Engine-time behavior remains gated by the separate live-hardware decision.
+Do not show per-process GPU-utilization percentages or engine-time activity: the validated HIP workload exposed no advancing DRM engine counters, and KFD exposed association and memory accounting but no utilization share.
 
 ## Detail view
 
