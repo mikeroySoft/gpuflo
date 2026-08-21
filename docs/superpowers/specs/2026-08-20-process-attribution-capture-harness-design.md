@@ -59,6 +59,8 @@ The harness:
 - terminates its workload and removes temporary files on normal exit and catchable signals; and
 - writes results only beneath `research/process-attribution/results/`.
 
+
+The latency and perturbation passes inspect readable DRM field names across the process list because that is the production discovery cost being measured, but discard every unrelated value immediately. They never read command lines or environments, and only the harness workload's detailed fdinfo/KFD values enter the result bundle.
 PCI BDF, GPU model, kernel/driver versions, KFD GPU IDs, and source field names remain because they are necessary technical evidence.
 
 ## Result shape
