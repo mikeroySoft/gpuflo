@@ -104,6 +104,8 @@ pub(crate) struct MetricBatch {
 pub(crate) struct SourceHealthReport {
     pub gpu: PhysicalGpuId,
     pub origin: Origin,
+    pub observed_mono: Instant,
+    pub lane: Lane,
     pub candidates: Vec<health::HealthCandidate>,
 }
 
@@ -156,9 +158,13 @@ pub(crate) struct RenderGpu {
 #[derive(Debug, Clone)]
 pub(crate) struct ProcessOverlay {
     pub scanned_at: Timestamp,
+    pub fdinfo_status: crate::source::Reading<()>,
+    pub kfd_status: crate::source::Reading<()>,
     pub rows: Vec<crate::source::process::ProcessRow>,
     /// Resolves row `drm-pdev` BDFs to stable physical GPU identities.
     pub gpu_by_bdf: std::collections::HashMap<PciBdf, PhysicalGpuId>,
+    /// Resolves row BDFs to stable XCP partition identities.
+    pub partition_by_bdf: std::collections::HashMap<PciBdf, PartitionId>,
 }
 
 /// Immutable presentation projection: canonical current observations plus

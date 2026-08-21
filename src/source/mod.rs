@@ -64,6 +64,20 @@ impl<T> Reading<T> {
             Reading::Error => Reading::Error,
         }
     }
+
+    /// Fallibly maps a value; conversion failure is malformed source data.
+    pub fn checked_map<U>(self, f: impl FnOnce(T) -> Option<U>) -> Reading<U> {
+        match self {
+            Reading::Value(v) => f(v).map_or(Reading::Malformed, Reading::Value),
+            Reading::Absent => Reading::Absent,
+            Reading::Sentinel => Reading::Sentinel,
+            Reading::Asleep => Reading::Asleep,
+            Reading::PermissionDenied => Reading::PermissionDenied,
+            Reading::UnsupportedDriver => Reading::UnsupportedDriver,
+            Reading::Malformed => Reading::Malformed,
+            Reading::Error => Reading::Error,
+        }
+    }
 }
 
 /// Maps an I/O error to reading evidence. amdgpu returns `EPERM` from a
@@ -88,6 +102,9 @@ pub(crate) struct KernelFastSample {
     pub gpu: PhysicalGpuId,
     pub read_wall: Timestamp,
     pub read_mono: Instant,
+    /// The physical device path disappeared during this collection; asks the
+    /// coordinator for immediate topology verification.
+    pub device_missing: bool,
     /// Socket hotspot temperature, milli-Celsius.
     pub hotspot_millic: Reading<i64>,
     /// Socket power, microwatts.
@@ -118,6 +135,8 @@ pub(crate) struct KernelSlowSample {
     pub gpu: PhysicalGpuId,
     pub read_wall: Timestamp,
     pub read_mono: Instant,
+    /// The physical device path disappeared during this collection.
+    pub device_missing: bool,
     /// Hotspot slowdown/critical limit, milli-Celsius.
     pub limit_millic: Reading<i64>,
     /// Power cap, microwatts.

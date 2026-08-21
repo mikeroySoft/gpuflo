@@ -22,9 +22,8 @@ const EXIT_FATAL: u8 = 1;
 const EXIT_USAGE: u8 = 2;
 const EXIT_SIGINT: u8 = 130;
 
-/// Bound for the first exportable snapshot; the product budget is 1 s, the
-/// bound leaves headroom for loaded hosts before declaring failure.
-const FIRST_SNAPSHOT_BOUND: Duration = Duration::from_secs(5);
+/// Hard product bound for the first exportable snapshot.
+const FIRST_SNAPSHOT_BOUND: Duration = Duration::from_secs(1);
 
 /// Parses the environment and arguments, runs the selected surface, and
 /// returns the process exit code.
@@ -79,7 +78,24 @@ pub(crate) fn run_from_env() -> u8 {
         }),
         OutputMode::Tiny => one_shot(monitor, &options, write_tiny),
         OutputMode::JsonStream => json_stream(monitor),
-        OutputMode::Interactive => interactive(monitor, presentation, options.gpu),
+        OutputMode::Interactive => {
+            if options.gpu.is_some() {
+                let snapshot = match first_snapshot(&monitor) {
+                    Ok(snapshot) => snapshot,
+                    Err(error) => {
+                        eprintln!("gruflo: {error}");
+                        let _ = monitor.shutdown();
+                        return EXIT_FATAL;
+                    }
+                };
+                if let Err(error) = select_gpu(&snapshot, &options.gpu) {
+                    eprintln!("gruflo: {error}");
+                    let _ = monitor.shutdown();
+                    return EXIT_USAGE;
+                }
+            }
+            interactive(monitor, presentation, options.gpu)
+        }
     }
 }
 
@@ -89,12 +105,12 @@ fn apply_debug_seams(options: &mut MonitorOptions) {
         return;
     }
     if let Some(root) = std::env::var_os("GRUFLO_HOST_ROOT") {
-        options.host_root = Some(std::path::PathBuf::from(root));
+        options.set_debug_host_root(std::path::PathBuf::from(root));
     }
     if let Ok(ms) = std::env::var("GRUFLO_FATAL_AFTER_MS")
         && let Ok(ms) = ms.parse::<u64>()
     {
-        options.fatal_after = Some(Duration::from_millis(ms));
+        options.set_debug_fatal_after(Duration::from_millis(ms));
     }
 }
 
@@ -105,7 +121,7 @@ fn first_snapshot(monitor: &Monitor) -> Result<Snapshot, String> {
         let remaining = deadline.saturating_duration_since(std::time::Instant::now());
         match monitor.receive_timeout(remaining) {
             Ok(MonitorEvent::Snapshot(snapshot)) => return Ok(snapshot),
-            Ok(MonitorEvent::Notice(_)) => continue,
+            Ok(MonitorEvent::Notice(notice)) => eprintln!("gruflo: {}", notice.message),
             Ok(MonitorEvent::Fatal(error)) => return Err(error.to_string()),
             Err(_) => return Err("no snapshot could be produced".to_owned()),
         }
@@ -155,27 +171,36 @@ fn one_shot(
             return EXIT_FATAL;
         }
     };
-    // Selector validation happens before output production.
     if matches!(options.output, OutputMode::Tiny)
         && let Err(message) = select_gpu(&snapshot, &options.gpu)
     {
         eprintln!("gruflo: {message}");
         let _ = monitor.shutdown();
-        return EXIT_USAGE;
+        return if snapshot.gpus.is_empty() {
+            EXIT_FATAL
+        } else {
+            EXIT_USAGE
+        };
     }
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
     let result = write(&mut out, &snapshot, options).and_then(|()| out.flush());
-    let code = match result {
-        Ok(()) => EXIT_OK,
-        Err(error) if error.kind() == std::io::ErrorKind::BrokenPipe => EXIT_OK,
+    let (code, broken_pipe) = match result {
+        Ok(()) => (EXIT_OK, false),
+        Err(error) if error.kind() == std::io::ErrorKind::BrokenPipe => (EXIT_OK, true),
         Err(error) => {
             eprintln!("gruflo: cannot write output: {error}");
-            EXIT_FATAL
+            (EXIT_FATAL, false)
         }
     };
-    let _ = monitor.shutdown();
-    code
+    match monitor.shutdown() {
+        Ok(()) => code,
+        Err(_) if broken_pipe => EXIT_OK,
+        Err(error) => {
+            eprintln!("gruflo: {error}");
+            EXIT_FATAL
+        }
+    }
 }
 
 fn write_once(
@@ -202,9 +227,16 @@ fn write_tiny(
 /// Continuous compact NDJSON at production cadence.
 fn json_stream(monitor: Monitor) -> u8 {
     let sigint = Arc::new(AtomicBool::new(false));
-    let _ = signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&sigint));
+    if let Err(error) =
+        signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&sigint))
+    {
+        eprintln!("gruflo: cannot install SIGINT handler: {error}");
+        let _ = monitor.shutdown();
+        return EXIT_FATAL;
+    }
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
+    let mut broken_pipe = false;
     let code = loop {
         if sigint.load(Ordering::SeqCst) {
             break EXIT_SIGINT;
@@ -214,6 +246,7 @@ fn json_stream(monitor: Monitor) -> u8 {
                 match output::write_ndjson_line(&mut out, &snapshot) {
                     Ok(()) => {}
                     Err(error) if error.kind() == std::io::ErrorKind::BrokenPipe => {
+                        broken_pipe = true;
                         break EXIT_OK;
                     }
                     Err(error) => {
@@ -231,12 +264,17 @@ fn json_stream(monitor: Monitor) -> u8 {
             Err(crate::monitor::ReceiveTimeoutError::Closed) => break EXIT_FATAL,
         }
     };
-    let _ = monitor.shutdown();
-    code
+    match monitor.shutdown() {
+        Ok(()) => code,
+        Err(_) if broken_pipe => EXIT_OK,
+        Err(error) => {
+            eprintln!("gruflo: {error}");
+            EXIT_FATAL
+        }
+    }
 }
 
-/// Interactive flow: preflight already passed; acquire the terminal under
-/// the staged guard, run the UI, restore before any diagnostic or shutdown.
+/// Interactive terminal flow.
 fn interactive(
     monitor: Monitor,
     presentation: crate::config::PresentationOptions,
@@ -244,64 +282,88 @@ fn interactive(
 ) -> u8 {
     let sigint = Arc::new(AtomicBool::new(false));
     let stop = Arc::new(AtomicBool::new(false));
-    let _ = signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&sigint));
-    let _ = signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&stop));
-    let _ = signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&stop));
-    let _ = signal_hook::flag::register(signal_hook::consts::SIGHUP, Arc::clone(&stop));
+    for (signal, flag) in [
+        (signal_hook::consts::SIGINT, Arc::clone(&sigint)),
+        (signal_hook::consts::SIGINT, Arc::clone(&stop)),
+        (signal_hook::consts::SIGTERM, Arc::clone(&stop)),
+        (signal_hook::consts::SIGHUP, Arc::clone(&stop)),
+    ] {
+        if let Err(error) = signal_hook::flag::register(signal, flag) {
+            eprintln!("gruflo: cannot install signal handler: {error}");
+            let _ = monitor.shutdown();
+            return EXIT_FATAL;
+        }
+    }
 
-    // Panic hook: best-effort restoration without panicking, before the
-    // default hook prints the panic message.
-    let default_hook = std::panic::take_hook();
+    let owner = std::thread::current().id();
+    let original_hook: Arc<dyn Fn(&std::panic::PanicHookInfo<'_>) + Send + Sync + 'static> =
+        Arc::from(std::panic::take_hook());
+    let panic_hook = Arc::clone(&original_hook);
     std::panic::set_hook(Box::new(move |info| {
-        let _ = crossterm::execute!(
-            std::io::stdout(),
-            crossterm::cursor::Show,
-            crossterm::terminal::LeaveAlternateScreen
-        );
-        let _ = crossterm::terminal::disable_raw_mode();
-        default_hook(info);
+        // Only the terminal-owning thread may change terminal modes. Worker
+        // panics remain ordinary diagnostics and are supervised by monitor.
+        if std::thread::current().id() == owner {
+            let _ = crossterm::execute!(std::io::stdout(), crossterm::cursor::Show);
+            let _ = crossterm::terminal::disable_raw_mode();
+            let _ =
+                crossterm::execute!(std::io::stdout(), crossterm::terminal::LeaveAlternateScreen);
+        }
+        panic_hook(info);
     }));
 
     let mut guard = match TerminalGuard::acquire(CrosstermOps) {
         Ok(guard) => guard,
         Err(error) => {
+            let _ = std::panic::take_hook();
+            std::panic::set_hook(Box::new(move |info| original_hook(info)));
             eprintln!("gruflo: cannot acquire the terminal: {error}");
             let _ = monitor.shutdown();
             return EXIT_FATAL;
         }
     };
-    let backend = ratatui::backend::CrosstermBackend::new(std::io::stdout());
-    let outcome = match ratatui::Terminal::new(backend) {
-        Ok(mut terminal) => ui::run(&mut terminal, &monitor, presentation, initial_gpu, &stop),
-        Err(error) => Err(error),
-    };
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let backend = ratatui::backend::CrosstermBackend::new(std::io::stdout());
+        match ratatui::Terminal::new(backend) {
+            Ok(mut terminal) => ui::run(&mut terminal, &monitor, presentation, initial_gpu, &stop),
+            Err(error) => Err(error),
+        }
+    }));
 
     // Restoration precedes every diagnostic, shutdown, flush, and join.
     let restore_failed = guard.restore().is_err();
     drop(guard);
     let _ = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| original_hook(info)));
 
     let code = match outcome {
-        Ok(ui::UiOutcome::Quit) => EXIT_OK,
-        Ok(ui::UiOutcome::Interrupted) => {
+        Ok(Ok(ui::UiOutcome::Quit)) => EXIT_OK,
+        Ok(Ok(ui::UiOutcome::Interrupted)) => {
             if sigint.load(Ordering::SeqCst) {
                 EXIT_SIGINT
             } else {
-                EXIT_OK // SIGTERM/SIGHUP: a requested, clean stop.
+                EXIT_OK
             }
         }
-        Ok(ui::UiOutcome::MonitorFatal(error)) => {
+        Ok(Ok(ui::UiOutcome::MonitorFatal(error))) => {
             eprintln!("gruflo: {error}");
             EXIT_FATAL
         }
-        Err(error) => {
+        Ok(Err(error)) => {
             eprintln!("gruflo: interface failure: {error}");
             EXIT_FATAL
         }
+        Err(_) => EXIT_FATAL, // panic hook already printed after restoration.
     };
-    let shutdown_failed = monitor.shutdown().is_err();
-    if restore_failed || shutdown_failed {
-        return EXIT_FATAL.max(code);
+    let shutdown_error = monitor.shutdown().err();
+    if let Some(error) = &shutdown_error {
+        eprintln!("gruflo: {error}");
+    }
+    if restore_failed || shutdown_error.is_some() {
+        return if code == EXIT_SIGINT {
+            EXIT_SIGINT
+        } else {
+            EXIT_FATAL
+        };
     }
     code
 }

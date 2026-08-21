@@ -24,10 +24,47 @@ pub(super) struct Palette {
     pub(super) graph: Color,
 }
 
-/// Role colors for one built-in theme.
-pub(super) fn palette(theme: Theme) -> Palette {
+/// Role colors for one built-in theme, with an ANSI fallback when terminal
+/// environment evidence does not advertise truecolor.
+pub(super) fn palette(theme: Theme, truecolor: bool) -> Palette {
+    if !truecolor {
+        return match theme {
+            Theme::Buffalo => Palette {
+                bg: Color::Black,
+                fg: Color::LightYellow,
+                muted: Color::DarkGray,
+                dim: Color::DarkGray,
+                accent: Color::Yellow,
+                warning: Color::LightRed,
+                fault: Color::Red,
+                border: Color::DarkGray,
+                graph: Color::Yellow,
+            },
+            Theme::Nord => Palette {
+                bg: Color::Black,
+                fg: Color::White,
+                muted: Color::Cyan,
+                dim: Color::DarkGray,
+                accent: Color::LightCyan,
+                warning: Color::Yellow,
+                fault: Color::Red,
+                border: Color::Blue,
+                graph: Color::Cyan,
+            },
+            Theme::Monochrome => Palette {
+                bg: Color::Black,
+                fg: Color::White,
+                muted: Color::Gray,
+                dim: Color::DarkGray,
+                accent: Color::White,
+                warning: Color::Gray,
+                fault: Color::White,
+                border: Color::DarkGray,
+                graph: Color::Gray,
+            },
+        };
+    }
     match theme {
-        // Approved warm Buffalo prototype constants.
         Theme::Buffalo => Palette {
             bg: Color::Rgb(20, 20, 19),
             fg: Color::Rgb(244, 225, 192),
@@ -39,7 +76,6 @@ pub(super) fn palette(theme: Theme) -> Palette {
             border: Color::Rgb(114, 91, 64),
             graph: Color::Rgb(245, 158, 11),
         },
-        // Restrained cool palette with the same semantic roles.
         Theme::Nord => Palette {
             bg: Color::Rgb(46, 52, 64),
             fg: Color::Rgb(236, 239, 244),
@@ -51,7 +87,6 @@ pub(super) fn palette(theme: Theme) -> Palette {
             border: Color::Rgb(76, 86, 106),
             graph: Color::Rgb(136, 192, 208),
         },
-        // Grays only; severity stays explicit through markers and text.
         Theme::Monochrome => Palette {
             bg: Color::Rgb(16, 16, 16),
             fg: Color::Rgb(232, 232, 232),
@@ -75,9 +110,9 @@ pub(super) struct Styler {
 }
 
 impl Styler {
-    pub(super) fn new(theme: Theme, color_enabled: bool) -> Self {
+    pub(super) fn new(theme: Theme, color_enabled: bool, truecolor: bool) -> Self {
         Self {
-            palette: palette(theme),
+            palette: palette(theme, truecolor),
             color: color_enabled,
         }
     }

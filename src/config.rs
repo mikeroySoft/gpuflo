@@ -22,7 +22,9 @@ pub(crate) struct Environment {
     /// `$HOME`.
     pub home: Option<PathBuf>,
     /// `$NO_COLOR`; any non-empty value disables color.
-    pub no_color: Option<String>,
+    pub no_color: Option<std::ffi::OsString>,
+    /// Whether terminal environment evidence advertises truecolor.
+    pub truecolor: bool,
 }
 
 impl Environment {
@@ -37,10 +39,20 @@ impl Environment {
             xdg_config_home: path("XDG_CONFIG_HOME"),
             xdg_state_home: path("XDG_STATE_HOME"),
             home: path("HOME"),
-            no_color: std::env::var("NO_COLOR").ok(),
+            no_color: std::env::var_os("NO_COLOR"),
+            truecolor: Self::terminal_truecolor(),
         }
     }
 
+    fn terminal_truecolor() -> bool {
+        ["COLORTERM", "TERM"]
+            .into_iter()
+            .filter_map(std::env::var_os)
+            .map(|value| value.to_string_lossy().to_ascii_lowercase())
+            .any(|value| {
+                value.contains("truecolor") || value.contains("24bit") || value.contains("direct")
+            })
+    }
     /// `$XDG_CONFIG_HOME/gruflo/config.toml`, falling back to
     /// `~/.config/gruflo/config.toml`. `None` when neither root resolves.
     pub fn config_path(&self) -> Option<PathBuf> {
@@ -65,7 +77,7 @@ impl Environment {
 
     /// Whether `NO_COLOR` unconditionally disables color.
     pub fn no_color_set(&self) -> bool {
-        self.no_color.as_deref().is_some_and(|v| !v.is_empty())
+        self.no_color.as_ref().is_some_and(|v| !v.is_empty())
     }
 }
 
@@ -196,6 +208,7 @@ pub(crate) struct PresentationOptions {
     pub theme: Theme,
     pub mode_preference: ModePreference,
     pub color_enabled: bool,
+    pub truecolor: bool,
 }
 
 impl Default for PresentationOptions {
@@ -204,6 +217,7 @@ impl Default for PresentationOptions {
             theme: Theme::Buffalo,
             mode_preference: ModePreference::Auto,
             color_enabled: true,
+            truecolor: false,
         }
     }
 }
@@ -247,6 +261,7 @@ pub(crate) fn resolve(
         theme,
         mode_preference,
         color_enabled: !disabled,
+        truecolor: environment.truecolor,
     })
 }
 
@@ -368,9 +383,9 @@ mod tests {
     fn any_non_empty_no_color_disables_color() {
         let (_dir, env) = temp_config("");
         let mut env = env;
-        env.no_color = Some("1".to_owned());
+        env.no_color = Some(std::ffi::OsString::from("1"));
         assert!(!resolve(&env, &cli_defaults()).unwrap().color_enabled);
-        env.no_color = Some(String::new());
+        env.no_color = Some(std::ffi::OsString::new());
         assert!(resolve(&env, &cli_defaults()).unwrap().color_enabled);
 
         let (_dir, env) = temp_config("no_color = true\n");

@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use crate::model::{ObservationState, PartitionId, PciBdf, PhysicalGpuId};
+use crate::model::{MemoryPool, ObservationState, PartitionId, PciBdf, PhysicalGpuId};
 use crate::source::amdsmi::AmdSmiSample;
 use crate::source::{KernelFastSample, KernelHealthSignal, KernelSlowSample, Reading};
 use crate::state::health::HealthCandidate;
@@ -187,6 +187,8 @@ pub(crate) fn kernel_slow(sample: KernelSlowSample) -> (Vec<MetricBatch>, Source
         SourceHealthReport {
             gpu: sample.gpu,
             origin: Origin::Kernel,
+            observed_mono: sample.read_mono,
+            lane: Lane::Slow,
             candidates,
         },
     )
@@ -198,45 +200,51 @@ pub(crate) fn kernel_slow(sample: KernelSlowSample) -> (Vec<MetricBatch>, Source
 pub(crate) fn amdsmi(
     samples: Vec<AmdSmiSample>,
     partitions: &HashMap<PciBdf, (PhysicalGpuId, PartitionId)>,
+    pools: &HashMap<PhysicalGpuId, MemoryPool>,
 ) -> Vec<MetricBatch> {
     let mut batches = Vec::with_capacity(samples.len());
     for sample in samples {
         let Some((gpu, partition)) = partitions.get(&sample.bdf) else {
             continue;
         };
+        let mut results = vec![
+            result(
+                MetricKey::Partition(PartitionMetric::ActivityPercent),
+                sample.gfx_activity_percent,
+                false,
+                |v| Value::F64(v as f64),
+            ),
+            result(
+                MetricKey::Partition(PartitionMetric::MemCtlActivityPercent),
+                sample.umc_activity_percent,
+                false,
+                |v| Value::F64(v as f64),
+            ),
+        ];
+        // AMD SMI's memory API is explicitly VRAM. Never export those values
+        // under a GTT/shared/unknown canonical pool label.
+        if pools.get(gpu) == Some(&MemoryPool::VRAM) {
+            results.push(result(
+                MetricKey::Partition(PartitionMetric::MemUsedBytes),
+                sample.vram_used_bytes,
+                false,
+                bytes,
+            ));
+            results.push(result(
+                MetricKey::Partition(PartitionMetric::MemTotalBytes),
+                sample.vram_total_bytes,
+                false,
+                bytes,
+            ));
+        }
         batches.push(MetricBatch {
             gpu: gpu.clone(),
             partition: Some(partition.clone()),
             origin: Origin::AmdSmi,
-            lane: Lane::Fast,
+            lane: Lane::Slow,
             observed_wall: sample.read_wall,
             observed_mono: sample.read_mono,
-            results: vec![
-                result(
-                    MetricKey::Partition(PartitionMetric::ActivityPercent),
-                    sample.gfx_activity_percent,
-                    false,
-                    |v| Value::F64(v as f64),
-                ),
-                result(
-                    MetricKey::Partition(PartitionMetric::MemCtlActivityPercent),
-                    sample.umc_activity_percent,
-                    false,
-                    |v| Value::F64(v as f64),
-                ),
-                result(
-                    MetricKey::Partition(PartitionMetric::MemUsedBytes),
-                    sample.vram_used_bytes,
-                    false,
-                    bytes,
-                ),
-                result(
-                    MetricKey::Partition(PartitionMetric::MemTotalBytes),
-                    sample.vram_total_bytes,
-                    false,
-                    bytes,
-                ),
-            ],
+            results,
             energy_accumulator: None,
         });
     }
@@ -301,6 +309,7 @@ mod tests {
             gpu: PhysicalGpuId::new("gpu-a"),
             read_wall: Timestamp::now(),
             read_mono: Instant::now(),
+            device_missing: false,
             hotspot_millic: Reading::Value(87_000),
             socket_power_microwatts: Reading::Value(318_000_000),
             energy: Some((42, 1.0 / 65536.0)),
@@ -406,6 +415,7 @@ mod tests {
             gpu: PhysicalGpuId::new("gpu-a"),
             read_wall: Timestamp::now(),
             read_mono: Instant::now(),
+            device_missing: false,
             limit_millic: Reading::Value(95_000),
             cap_microwatts: Reading::UnsupportedDriver,
             partitions: vec![KernelPartitionSlow {

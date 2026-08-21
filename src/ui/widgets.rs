@@ -55,7 +55,7 @@ struct View<'a> {
 /// Renders one full frame from session state. Pure projection: no canonical
 /// data is created, defaulted, or mutated here.
 pub(super) fn draw(frame: &mut Frame<'_>, state: &UiState) {
-    let styler = Styler::new(state.theme, state.color_enabled);
+    let styler = Styler::new(state.theme, state.color_enabled, state.truecolor);
     let area = frame.area();
     frame.render_widget(Block::default().style(styler.background()), area);
 
@@ -204,29 +204,35 @@ fn render_tiny(frame: &mut Frame<'_>, view: &View<'_>, area: Rect) {
         Span::styled(format!("  {label}  "), styler.fg(palette.muted)),
     ];
     match primary_partition(gpu) {
-        Some(partition) => match &partition.activity_percent {
-            Observation::Value { value, .. } => {
-                spans.push(Span::styled(
+        Some(partition) => {
+            match &partition.activity_percent {
+                Observation::Value { value, .. } => spans.push(Span::styled(
                     format!("activity {value:>2.0}%"),
                     styler.bold(palette.accent),
-                ));
-                let memory = &partition.memory;
-                let pool = format::pool_label(memory.pool.as_str());
-                let memory_text = match memory.occupancy_percent.current() {
-                    Some(occupancy) => format!("   {pool} {occupancy:>2.0}%"),
-                    None => format!("   {pool} —"),
-                };
-                spans.push(Span::styled(memory_text, styler.fg(palette.fg)));
+                )),
+                Observation::Unavailable { state, observed_at } => {
+                    let text = if *state == ObservationState::ASLEEP {
+                        "GPU asleep".to_owned()
+                    } else {
+                        format!(
+                            "activity {}",
+                            format::unavailable_phrase(state, *observed_at, sampled_at)
+                        )
+                    };
+                    spans.push(Span::styled(text, styler.fg(palette.dim)));
+                }
             }
-            Observation::Unavailable { state, observed_at } => {
-                let text = if *state == ObservationState::ASLEEP {
-                    "GPU asleep".to_owned()
-                } else {
+            let memory = &partition.memory;
+            let pool = format::pool_label(memory.pool.as_str());
+            let memory_text = match &memory.occupancy_percent {
+                Observation::Value { value, .. } => format!("   {pool} {value:>2.0}%"),
+                Observation::Unavailable { state, observed_at } => format!(
+                    "   {pool} {}",
                     format::unavailable_phrase(state, *observed_at, sampled_at)
-                };
-                spans.push(Span::styled(text, styler.fg(palette.dim)));
-            }
-        },
+                ),
+            };
+            spans.push(Span::styled(memory_text, styler.fg(palette.fg)));
+        }
         None => spans.push(Span::styled("—", styler.fg(palette.dim))),
     }
 
@@ -713,15 +719,25 @@ fn render_processes(frame: &mut Frame<'_>, view: &View<'_>, area: Rect) {
     let mut lines: Vec<Line<'_>> = Vec::new();
     match &view.model.processes {
         None => lines.push(Line::styled("scanning processes…", styler.fg(palette.dim))),
+        Some(overlay)
+            if overlay.rows.is_empty()
+                && !matches!(overlay.fdinfo_status, Reading::Value(()))
+                && !matches!(overlay.kfd_status, Reading::Value(())) =>
+        {
+            lines.push(Line::styled(
+                "process attribution unavailable",
+                styler.fg(palette.dim),
+            ));
+        }
         Some(overlay) if overlay.rows.is_empty() => lines.push(Line::styled(
-            "no attributable processes",
+            "scan attributed no processes",
             styler.fg(palette.dim),
         )),
         Some(overlay) => {
             lines.push(Line::styled(
                 format!(
-                    "{:>7}  {:<16}  {:<8}  {:>10}  {:>16}  {}",
-                    "PID", "name", "GPU", "VRAM", "KFD", "container"
+                    "{:>7} {:<14} {:<12} {:>9} {:>9} {:>12} {}",
+                    "PID", "name", "GPU/XCP", "VRAM", "GTT", "KFD", "container"
                 ),
                 styler.fg(palette.muted),
             ));
@@ -733,6 +749,27 @@ fn render_processes(frame: &mut Frame<'_>, view: &View<'_>, area: Rect) {
             }
         }
     }
+    if let Some(overlay) = &view.model.processes {
+        let mut limitations = Vec::new();
+        if !matches!(overlay.fdinfo_status, Reading::Value(())) {
+            limitations.push(format!(
+                "fdinfo {}",
+                format::reading_phrase(&overlay.fdinfo_status)
+            ));
+        }
+        if !matches!(overlay.kfd_status, Reading::Value(())) {
+            limitations.push(format!(
+                "KFD {}",
+                format::reading_phrase(&overlay.kfd_status)
+            ));
+        }
+        if !limitations.is_empty() {
+            lines.push(Line::styled(
+                limitations.join(" · "),
+                styler.fg(palette.dim),
+            ));
+        }
+    }
     lines.push(Line::raw(""));
     lines.push(Line::styled(
         "attributed memory only · the kernel exposes no per-process GPU utilization",
@@ -740,7 +777,7 @@ fn render_processes(frame: &mut Frame<'_>, view: &View<'_>, area: Rect) {
     ));
 
     let height = (lines.len() as u16).saturating_add(2);
-    let inner = overlay_box(frame, styler, area, 86, height, " processes ");
+    let inner = overlay_box(frame, styler, area, 96, height, " processes ");
     frame.render_widget(Paragraph::new(lines), inner);
 }
 
@@ -752,11 +789,29 @@ fn process_line(row: &ProcessRow, overlay: &ProcessOverlay, model: &RenderModel)
     let gpu = row
         .bdf
         .as_ref()
-        .and_then(|bdf| overlay.gpu_by_bdf.get(bdf))
-        .and_then(|id| model.snapshot.gpus.iter().find(|gpu| gpu.id == *id))
-        .map(|gpu| format!("GPU {}", gpu.index))
+        .and_then(|bdf| overlay.gpu_by_bdf.get(bdf).map(|gpu| (bdf, gpu)))
+        .and_then(|(bdf, id)| {
+            model
+                .snapshot
+                .gpus
+                .iter()
+                .find(|gpu| gpu.id == *id)
+                .map(|gpu| {
+                    let partition = overlay
+                        .partition_by_bdf
+                        .get(bdf)
+                        .and_then(|id| gpu.partitions.iter().find(|part| part.id == *id));
+                    match partition {
+                        Some(part) if gpu.partitions.len() > 1 => {
+                            format!("GPU {}/XCP {}", gpu.index, part.index)
+                        }
+                        _ => format!("GPU {}", gpu.index),
+                    }
+                })
+        })
         .unwrap_or_else(|| "unknown".to_owned());
     let vram = memory_cell(&row.fdinfo_vram_bytes);
+    let gtt = memory_cell(&row.fdinfo_gtt_bytes);
     let kfd = format!("KFD {}", memory_cell(&row.kfd_vram_bytes));
     let container = row
         .container
@@ -764,7 +819,7 @@ fn process_line(row: &ProcessRow, overlay: &ProcessOverlay, model: &RenderModel)
         .map(|container| clip(container, 12))
         .unwrap_or_else(|| "—".to_owned());
     format!(
-        "{:>7}  {name:<16}  {gpu:<8}  {vram:>10}  {kfd:>16}  {container}",
+        "{:>7} {name:<14} {gpu:<12} {vram:>9} {gtt:>9} {kfd:>12} {container}",
         row.pid
     )
 }

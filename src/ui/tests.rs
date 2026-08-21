@@ -158,6 +158,7 @@ fn state_with_model(color_enabled: bool) -> UiState {
             theme: Theme::Buffalo,
             mode_preference: ModePreference::Auto,
             color_enabled,
+            truecolor: true,
         },
         None,
     );
@@ -499,11 +500,19 @@ fn process_overlay_lists_honest_attribution() {
     let mut state = state_with_model(true);
     state.show_processes = true;
     let mut with_processes = model();
+    let mut secondary = with_processes.snapshot.gpus[0].partitions[0].clone();
+    secondary.id = PartitionId::new("gpu-a-p1");
+    secondary.index = 1;
+    secondary.is_primary = false;
+    with_processes.snapshot.gpus[0].partitions.push(secondary);
     let bdf = PciBdf::parse("0000:03:00.0").expect("bdf");
     let mut gpu_by_bdf = HashMap::new();
     gpu_by_bdf.insert(bdf.clone(), PhysicalGpuId::new("gpu-a"));
+    let partition_by_bdf = HashMap::from([(bdf.clone(), PartitionId::new("gpu-a-p0"))]);
     with_processes.processes = Some(ProcessOverlay {
         scanned_at: sampled_at(),
+        fdinfo_status: Reading::Value(()),
+        kfd_status: Reading::Value(()),
         rows: vec![
             ProcessRow {
                 pid: 4242,
@@ -525,12 +534,16 @@ fn process_overlay_lists_honest_attribution() {
             },
         ],
         gpu_by_bdf,
+        partition_by_bdf,
     });
     let _ = state.adopt_model(with_processes);
     let text = buffer_text(&render(&state, 120, 40));
     assert!(text.contains("4242"));
     assert!(text.contains("llama-server"));
-    assert!(text.contains("GPU 0"), "resolved association missing");
+    assert!(
+        text.contains("GPU 0/XCP 0"),
+        "resolved physical/XCP association missing"
+    );
     assert!(text.contains("1.5 GiB"), "fdinfo VRAM missing");
     assert!(text.contains("KFD 1.0 GiB"), "labelled KFD memory missing");
     assert!(text.contains("unknown"), "unresolved association missing");

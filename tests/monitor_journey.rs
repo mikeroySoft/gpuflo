@@ -10,6 +10,29 @@ use gruflo::{
     Monitor, MonitorCommand, MonitorEvent, MonitorOptions, PhysicalGpuId, ReceiveTimeoutError,
 };
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
+static DEBUG_ENV: AtomicBool = AtomicBool::new(false);
+
+struct EnvGuard;
+
+impl EnvGuard {
+    fn acquire() -> Self {
+        while DEBUG_ENV
+            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .is_err()
+        {
+            std::thread::yield_now();
+        }
+        Self
+    }
+}
+
+impl Drop for EnvGuard {
+    fn drop(&mut self) {
+        DEBUG_ENV.store(false, Ordering::Release);
+    }
+}
 /// Copies a committed fixture tree into a unique mutable temp root.
 fn mutable_root(scenario: &str, tag: &str) -> PathBuf {
     let source = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -34,9 +57,17 @@ fn copy_tree(from: &Path, to: &Path) {
 }
 
 fn start(root: &Path) -> Monitor {
-    let mut options = MonitorOptions::new();
-    options.host_root = Some(root.to_owned());
-    Monitor::start(options).expect("monitor starts on the fixture host")
+    start_with_options(root, MonitorOptions::new())
+}
+
+fn start_with_options(root: &Path, options: MonitorOptions) -> Monitor {
+    let _guard = EnvGuard::acquire();
+    // SAFETY: serialized within this test process and consumed synchronously
+    // by Monitor::start before the guard is released.
+    unsafe { std::env::set_var("GRUFLO_HOST_ROOT", root) };
+    let result = Monitor::start(options);
+    unsafe { std::env::remove_var("GRUFLO_HOST_ROOT") };
+    result.expect("monitor starts on the fixture host")
 }
 
 fn next_snapshot(monitor: &Monitor) -> gruflo::Snapshot {
@@ -193,4 +224,21 @@ fn partition_configuration_change_is_fatal_and_closes_the_stream() {
         other => panic!("stream must close after fatal, got {other:?}"),
     }
     monitor.shutdown().expect("shutdown after fatal");
+}
+
+#[test]
+fn shutdown_surfaces_persistence_failure() {
+    let root = mutable_root("discrete-spx", "persist-failure");
+    let blocked_parent =
+        std::env::temp_dir().join(format!("gruflo-state-blocked-{}", std::process::id()));
+    std::fs::write(&blocked_parent, "not a directory").unwrap();
+    let mut options = MonitorOptions::new();
+    options.summary_path = Some(blocked_parent.join("daily.json"));
+    let monitor = start_with_options(&root, options);
+    let _ = next_snapshot(&monitor);
+    let error = monitor
+        .shutdown()
+        .expect_err("persistence failure must surface");
+    assert!(error.to_string().contains("persistence"));
+    let _ = std::fs::remove_file(blocked_parent);
 }

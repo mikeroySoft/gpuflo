@@ -138,6 +138,7 @@ pub(super) struct UiState {
     theme: Theme,
     mode_preference: ModePreference,
     color_enabled: bool,
+    truecolor: bool,
     model: Option<RenderModel>,
     /// Selection tracks the stable physical GPU identity, never an index.
     selected: Option<PhysicalGpuId>,
@@ -164,6 +165,7 @@ impl UiState {
             theme: presentation.theme,
             mode_preference: presentation.mode_preference,
             color_enabled: presentation.color_enabled,
+            truecolor: presentation.truecolor,
             model: None,
             selected: None,
             selected_position: 0,

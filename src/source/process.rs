@@ -35,6 +35,10 @@ pub(crate) struct ProcessRow {
 #[derive(Debug, Clone)]
 pub(crate) struct ProcessSample {
     pub read_wall: Timestamp,
+    /// DRM fdinfo scan availability (may be permission-limited while rows survive).
+    pub fdinfo_status: Reading<()>,
+    /// KFD scan availability, independent of fdinfo.
+    pub kfd_status: Reading<()>,
     pub rows: Vec<ProcessRow>,
 }
 
@@ -54,32 +58,73 @@ struct Accumulator {
     kfd_vram_bytes: Option<Reading<u64>>,
 }
 
+/// Process/KFD access failures are feature-local permission states. Unlike
+/// amdgpu sensor reads, EPERM here never means the physical GPU is asleep.
+fn process_error_reading<T>(error: &std::io::Error) -> Reading<T> {
+    match error.raw_os_error() {
+        Some(1 | 13) => Reading::PermissionDenied,
+        _ if error.kind() == std::io::ErrorKind::NotFound => Reading::Absent,
+        _ => Reading::Error,
+    }
+}
+
+fn merge_status(left: Reading<()>, right: Reading<()>) -> Reading<()> {
+    use Reading::{Absent, Error, PermissionDenied, Value};
+    match (left, right) {
+        (PermissionDenied, _) | (_, PermissionDenied) => PermissionDenied,
+        (Error, _) | (_, Error) => Error,
+        (Absent, _) | (_, Absent) => Absent,
+        (Value(()), Value(())) => Value(()),
+        _ => Reading::Error,
+    }
+}
+
 impl ProcessSource {
     /// Creates the adapter over an explicit root (`/` in production).
     pub fn new(root: PathBuf) -> Self {
         Self { root }
     }
 
-    /// Maps KFD `gpu_id` values to PCI BDFs from the KFD topology tree.
-    fn kfd_topology(&self) -> HashMap<u64, PciBdf> {
+    /// Maps KFD `gpu_id` values to PCI BDFs and retains partial-scan state.
+    fn kfd_topology(&self) -> (HashMap<u64, PciBdf>, Reading<()>) {
         let mut map = HashMap::new();
         let nodes = self.root.join("sys/class/kfd/kfd/topology/nodes");
-        let Ok(entries) = std::fs::read_dir(&nodes) else {
-            return map;
+        let entries = match std::fs::read_dir(&nodes) {
+            Ok(entries) => entries,
+            Err(error) => return (map, process_error_reading(&error)),
         };
-        for entry in entries.flatten() {
-            let dir = entry.path();
-            let Ok(gpu_id) = std::fs::read_to_string(dir.join("gpu_id")) else {
-                continue;
+        let mut status = Reading::Value(());
+        for entry in entries {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(_) => {
+                    status = merge_status(status, Reading::Error);
+                    continue;
+                }
             };
-            let Ok(gpu_id) = gpu_id.trim().parse::<u64>() else {
-                continue;
+            let dir = entry.path();
+            let gpu_id = match std::fs::read_to_string(dir.join("gpu_id")) {
+                Ok(value) => match value.trim().parse::<u64>() {
+                    Ok(value) => value,
+                    Err(_) => {
+                        status = merge_status(status, Reading::Error);
+                        continue;
+                    }
+                },
+                Err(error) => {
+                    status = merge_status(status, process_error_reading(&error));
+                    continue;
+                }
             };
             if gpu_id == 0 {
-                continue; // CPU node.
-            }
-            let Ok(properties) = std::fs::read_to_string(dir.join("properties")) else {
                 continue;
+            }
+            let properties = match std::fs::read_to_string(dir.join("properties")) {
+                Ok(value) => value,
+                Err(error) => {
+                    status = merge_status(status, process_error_reading(&error));
+                    continue;
+                }
             };
             let mut domain = 0u64;
             let mut location = None;
@@ -91,98 +136,129 @@ impl ProcessSource {
                     _ => {}
                 }
             }
-            let Some(location) = location else { continue };
+            let Some(location) = location else {
+                status = merge_status(status, Reading::Error);
+                continue;
+            };
             let bus = (location >> 8) & 0xFF;
             let device = (location >> 3) & 0x1F;
             let function = location & 0x7;
-            if let Ok(bdf) =
-                PciBdf::parse(&format!("{domain:04x}:{bus:02x}:{device:02x}.{function:x}"))
-            {
-                map.insert(gpu_id, bdf);
+            match PciBdf::parse(&format!("{domain:04x}:{bus:02x}:{device:02x}.{function:x}")) {
+                Ok(bdf) => {
+                    map.insert(gpu_id, bdf);
+                }
+                Err(_) => status = merge_status(status, Reading::Error),
             }
         }
-        map
+        (map, status)
     }
 
     /// Performs one bounded full scan. Enumerates candidate PIDs from both
-    /// `/proc` fdinfo and the world-readable KFD proc tree so a permission-
-    /// limited fdinfo still yields an honest row.
+    /// `/proc` fdinfo and the world-readable KFD proc tree.
     pub fn scan(&self) -> ProcessSample {
         let read_wall = Timestamp::now();
-        let topology = self.kfd_topology();
-
-        // (pid, Some(bdf)) or (pid, None) for unresolvable associations.
+        let (topology, topology_status) = self.kfd_topology();
         let mut evidence: HashMap<(u32, Option<PciBdf>), Accumulator> = HashMap::new();
 
-        // DRM fdinfo pass over numeric /proc entries.
-        if let Ok(entries) = std::fs::read_dir(self.root.join("proc")) {
-            for entry in entries.flatten() {
-                let name = entry.file_name();
-                let Some(pid) = name.to_str().and_then(|n| n.parse::<u32>().ok()) else {
-                    continue;
-                };
-                self.scan_fdinfo(pid, &entry.path(), &mut evidence);
+        let mut fdinfo_statuses = Vec::new();
+        match std::fs::read_dir(self.root.join("proc")) {
+            Ok(entries) => {
+                for entry in entries.flatten() {
+                    let name = entry.file_name();
+                    let Some(pid) = name.to_str().and_then(|n| n.parse::<u32>().ok()) else {
+                        continue;
+                    };
+                    fdinfo_statuses.push(self.scan_fdinfo(pid, &entry.path(), &mut evidence));
+                }
             }
+            Err(error) => fdinfo_statuses.push(process_error_reading(&error)),
         }
 
-        // KFD pass: membership and separate memory accounting.
         let kfd_proc = self.root.join("sys/class/kfd/kfd/proc");
-        if let Ok(entries) = std::fs::read_dir(&kfd_proc) {
-            for entry in entries.flatten() {
-                let name = entry.file_name();
-                let Some(pid) = name.to_str().and_then(|n| n.parse::<u32>().ok()) else {
-                    continue;
-                };
-                self.scan_kfd(pid, &entry.path(), &topology, &mut evidence);
+        let mut kfd_status = topology_status;
+        match std::fs::read_dir(&kfd_proc) {
+            Ok(entries) => {
+                for entry in entries {
+                    let entry = match entry {
+                        Ok(entry) => entry,
+                        Err(_) => {
+                            kfd_status = merge_status(kfd_status, Reading::Error);
+                            continue;
+                        }
+                    };
+                    let name = entry.file_name();
+                    let Some(pid) = name.to_str().and_then(|n| n.parse::<u32>().ok()) else {
+                        continue;
+                    };
+                    kfd_status = merge_status(
+                        kfd_status,
+                        self.scan_kfd(pid, &entry.path(), &topology, &mut evidence),
+                    );
+                }
+            }
+            Err(error) => {
+                kfd_status = merge_status(kfd_status, process_error_reading(&error));
             }
         }
-
         let mut rows: Vec<ProcessRow> = evidence
             .into_iter()
             .map(|((pid, bdf), acc)| {
                 let proc_dir = self.root.join("proc").join(pid.to_string());
-                let name = read_comm(&proc_dir);
-                let container = read_container(&proc_dir);
                 let field = |kib: Option<u64>, malformed: bool| {
-                    if malformed && kib.is_none() {
+                    if malformed {
                         Reading::Malformed
                     } else {
                         fdinfo_reading(kib, &proc_dir)
                     }
                 };
-                let vram = field(acc.fdinfo_vram_kib, acc.vram_malformed);
-                let gtt = field(acc.fdinfo_gtt_kib, acc.gtt_malformed);
                 ProcessRow {
                     pid,
-                    name,
+                    name: read_comm(&proc_dir),
                     bdf,
-                    fdinfo_vram_bytes: vram,
-                    fdinfo_gtt_bytes: gtt,
+                    fdinfo_vram_bytes: field(acc.fdinfo_vram_kib, acc.vram_malformed),
+                    fdinfo_gtt_bytes: field(acc.fdinfo_gtt_kib, acc.gtt_malformed),
                     kfd_vram_bytes: acc.kfd_vram_bytes.unwrap_or(Reading::Absent),
-                    container,
+                    container: read_container(&proc_dir),
                 }
             })
             .collect();
-
-        // Sort primarily by attributed GPU memory, descending; the two
-        // accounting systems stay separate, so order on the larger honest
-        // single figure without summing them.
         rows.sort_by(|a, b| {
             let key = |row: &ProcessRow| {
-                let fdinfo = match row.fdinfo_vram_bytes {
+                let value = |reading| match reading {
                     Reading::Value(v) => v,
                     _ => 0,
                 };
-                let kfd = match row.kfd_vram_bytes {
-                    Reading::Value(v) => v,
-                    _ => 0,
-                };
-                fdinfo.max(kfd)
+                value(row.fdinfo_vram_bytes)
+                    .max(value(row.fdinfo_gtt_bytes))
+                    .max(value(row.kfd_vram_bytes))
             };
             key(b).cmp(&key(a)).then_with(|| a.pid.cmp(&b.pid))
         });
 
-        ProcessSample { read_wall, rows }
+        let fdinfo_status = if fdinfo_statuses
+            .iter()
+            .any(|status| matches!(status, Reading::PermissionDenied))
+        {
+            Reading::PermissionDenied
+        } else if fdinfo_statuses
+            .iter()
+            .any(|status| matches!(status, Reading::Error))
+        {
+            Reading::Error
+        } else if fdinfo_statuses
+            .iter()
+            .any(|status| matches!(status, Reading::Value(())))
+        {
+            Reading::Value(())
+        } else {
+            Reading::Absent
+        };
+        ProcessSample {
+            read_wall,
+            fdinfo_status,
+            kfd_status,
+            rows,
+        }
     }
 
     /// Reads every fdinfo entry of one PID, deduplicating DRM clients.
@@ -191,9 +267,10 @@ impl ProcessSource {
         pid: u32,
         proc_dir: &Path,
         evidence: &mut HashMap<(u32, Option<PciBdf>), Accumulator>,
-    ) {
-        let Ok(entries) = std::fs::read_dir(proc_dir.join("fdinfo")) else {
-            return;
+    ) -> Reading<()> {
+        let entries = match std::fs::read_dir(proc_dir.join("fdinfo")) {
+            Ok(entries) => entries,
+            Err(error) => return process_error_reading(&error),
         };
         // One DRM client may be visible through several duplicated fds;
         // count each client id once.
@@ -222,27 +299,41 @@ impl ProcessSource {
                     _ => {}
                 }
             }
-            let client = (pdev.clone(), client_id);
+            let dedup_id = if client_id.is_empty() {
+                format!("fd:{}", entry.file_name().to_string_lossy())
+            } else {
+                client_id
+            };
+            let client = (pdev.clone(), dedup_id);
             if seen_clients.contains(&client) {
                 continue;
             }
             seen_clients.push(client);
             let acc = evidence.entry((pid, pdev)).or_default();
             match vram_kib {
-                Some(Ok(kib)) => {
-                    *acc.fdinfo_vram_kib.get_or_insert(0) += kib;
-                }
+                Some(Ok(kib)) => match acc.fdinfo_vram_kib.unwrap_or(0).checked_add(kib) {
+                    Some(total) => acc.fdinfo_vram_kib = Some(total),
+                    None => {
+                        acc.fdinfo_vram_kib = None;
+                        acc.vram_malformed = true;
+                    }
+                },
                 Some(Err(())) => acc.vram_malformed = true,
                 None => {}
             }
             match gtt_kib {
-                Some(Ok(kib)) => {
-                    *acc.fdinfo_gtt_kib.get_or_insert(0) += kib;
-                }
+                Some(Ok(kib)) => match acc.fdinfo_gtt_kib.unwrap_or(0).checked_add(kib) {
+                    Some(total) => acc.fdinfo_gtt_kib = Some(total),
+                    None => {
+                        acc.fdinfo_gtt_kib = None;
+                        acc.gtt_malformed = true;
+                    }
+                },
                 Some(Err(())) => acc.gtt_malformed = true,
                 None => {}
             }
         }
+        Reading::Value(())
     }
 
     /// Reads one KFD proc entry: queue membership and `vram_<gpuid>`.
@@ -252,17 +343,27 @@ impl ProcessSource {
         kfd_dir: &Path,
         topology: &HashMap<u64, PciBdf>,
         evidence: &mut HashMap<(u32, Option<PciBdf>), Accumulator>,
-    ) {
-        let Ok(entries) = std::fs::read_dir(kfd_dir) else {
-            return;
+    ) -> Reading<()> {
+        let entries = match std::fs::read_dir(kfd_dir) {
+            Ok(entries) => entries,
+            Err(error) => return process_error_reading(&error),
         };
-        for entry in entries.flatten() {
+        let mut status = Reading::Value(());
+        for entry in entries {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(_) => {
+                    status = merge_status(status, Reading::Error);
+                    continue;
+                }
+            };
             let name = entry.file_name();
             let Some(name) = name.to_str() else { continue };
             let Some(gpu_id) = name.strip_prefix("vram_") else {
                 continue;
             };
             let Ok(gpu_id) = gpu_id.parse::<u64>() else {
+                status = merge_status(status, Reading::Error);
                 continue;
             };
             let bdf = topology.get(&gpu_id).cloned();
@@ -271,22 +372,31 @@ impl ProcessSource {
                     Ok(bytes) => Reading::Value(bytes),
                     Err(_) => Reading::Malformed,
                 },
-                Err(error) => super::kernel_error_reading(&error),
+                Err(error) => process_error_reading(&error),
+            };
+            status = match reading {
+                Reading::PermissionDenied => merge_status(status, Reading::PermissionDenied),
+                Reading::Malformed | Reading::Error => merge_status(status, Reading::Error),
+                Reading::Absent => merge_status(status, Reading::Absent),
+                _ => status,
             };
             evidence.entry((pid, bdf)).or_default().kfd_vram_bytes = Some(reading);
         }
+        status
     }
 }
 
 /// fdinfo memory: accumulated KiB × 1024, or the reason it is missing.
 fn fdinfo_reading(kib: Option<u64>, proc_dir: &Path) -> Reading<u64> {
     match kib {
-        Some(kib) => Reading::Value(kib * 1024),
+        Some(kib) => kib
+            .checked_mul(1024)
+            .map_or(Reading::Malformed, Reading::Value),
         // Distinguish an unreadable fdinfo directory (permission-limited
         // cross-user attribution) from a KFD-only process.
         None => match std::fs::read_dir(proc_dir.join("fdinfo")) {
             Ok(_) => Reading::Absent,
-            Err(error) => super::kernel_error_reading(&error),
+            Err(error) => process_error_reading(&error),
         },
     }
 }
@@ -297,11 +407,18 @@ fn parse_kib(value: &str) -> Result<u64, ()> {
     number.parse::<u64>().map_err(|_| ())
 }
 
-/// Permitted process name from `comm`; never the command line.
+/// Permitted process name from `comm`; never the command line. Control
+/// characters are replaced here so terminal safety is owned in-repo rather
+/// than relying on a renderer's filtering implementation.
 fn read_comm(proc_dir: &Path) -> Reading<String> {
     match std::fs::read_to_string(proc_dir.join("comm")) {
-        Ok(text) => Reading::Value(text.trim().to_owned()),
-        Err(error) => super::kernel_error_reading(&error),
+        Ok(text) => Reading::Value(
+            text.trim()
+                .chars()
+                .map(|c| if c.is_control() { '\u{fffd}' } else { c })
+                .collect(),
+        ),
+        Err(error) => process_error_reading(&error),
     }
 }
 
@@ -453,5 +570,37 @@ mod tests {
         let debug = format!("{row:?}");
         assert!(!debug.contains("percent"));
         assert!(!debug.contains("engine"));
+    }
+
+    #[test]
+    fn extreme_fdinfo_quantity_is_malformed_instead_of_wrapping() {
+        assert_eq!(
+            fdinfo_reading(Some(u64::MAX), Path::new("/nonexistent")),
+            Reading::Malformed
+        );
+    }
+
+    #[test]
+    fn process_names_are_sanitized_before_rendering() {
+        let dir = std::env::temp_dir().join(format!("gruflo-process-name-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("comm"), "safe\u{1b}]0;owned\u{7}\n").unwrap();
+        assert_eq!(
+            read_comm(&dir),
+            Reading::Value("safe\u{fffd}]0;owned\u{fffd}".to_owned())
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn process_eperm_is_permission_not_gpu_sleep() {
+        assert_eq!(
+            process_error_reading::<u64>(&std::io::Error::from_raw_os_error(1)),
+            Reading::PermissionDenied
+        );
+        assert_eq!(
+            process_error_reading::<u64>(&std::io::Error::from_raw_os_error(13)),
+            Reading::PermissionDenied
+        );
     }
 }

@@ -110,21 +110,24 @@ fn write_memory(
     match (&memory.used_bytes, &memory.total_bytes) {
         (Observation::Value { value: used, .. }, Observation::Value { value: total, .. }) => {
             write!(out, "{}/{} GiB {label}", Gib(*used), Gib(*total))?;
-            if let Observation::Value {
-                value: occupancy, ..
-            } = &memory.occupancy_percent
-            {
-                write!(out, " ({occupancy:.0}%)")?;
-            }
-            Ok(())
         }
-        // Highest-information unavailable phrase: prefer used's state.
-        (Observation::Unavailable { state, observed_at }, _)
-        | (_, Observation::Unavailable { state, observed_at }) => {
-            write!(out, "{label} ")?;
-            write_unavailable(out, state, *observed_at, sampled_at)
+        (used, total) => {
+            write!(out, "used ")?;
+            write_u64_observation(out, used, sampled_at, true)?;
+            write!(out, " / total ")?;
+            write_u64_observation(out, total, sampled_at, true)?;
+            write!(out, " {label}")?;
         }
     }
+    write!(out, " (")?;
+    match &memory.occupancy_percent {
+        Observation::Value { value, .. } => write!(out, "{value:.0}%")?,
+        Observation::Unavailable { state, observed_at } => {
+            write!(out, "occupancy ")?;
+            write_unavailable(out, state, *observed_at, sampled_at)?;
+        }
+    }
+    write!(out, ")")
 }
 
 fn write_hotspot(
@@ -134,10 +137,14 @@ fn write_hotspot(
 ) -> io::Result<()> {
     write!(out, " | hotspot ")?;
     match &temperature.hotspot_celsius {
-        Observation::Value { value, .. } => match &temperature.limit_celsius {
-            Observation::Value { value: limit, .. } => write!(out, "{value:.0}/{limit:.0}°C"),
-            Observation::Unavailable { .. } => write!(out, "{value:.0}°C"),
-        },
+        Observation::Value { value, .. } => write!(out, "{value:.0}°C")?,
+        Observation::Unavailable { state, observed_at } => {
+            write_unavailable(out, state, *observed_at, sampled_at)?;
+        }
+    }
+    write!(out, " / limit ")?;
+    match &temperature.limit_celsius {
+        Observation::Value { value, .. } => write!(out, "{value:.0}°C"),
         Observation::Unavailable { state, observed_at } => {
             write_unavailable(out, state, *observed_at, sampled_at)
         }
@@ -151,10 +158,29 @@ fn write_power(
 ) -> io::Result<()> {
     write!(out, " | power ")?;
     match &power.socket_watts {
-        Observation::Value { value, .. } => match &power.cap_watts {
-            Observation::Value { value: cap, .. } => write!(out, "{value:.0}/{cap:.0} W"),
-            Observation::Unavailable { .. } => write!(out, "{value:.0} W"),
-        },
+        Observation::Value { value, .. } => write!(out, "{value:.0} W")?,
+        Observation::Unavailable { state, observed_at } => {
+            write_unavailable(out, state, *observed_at, sampled_at)?;
+        }
+    }
+    write!(out, " / cap ")?;
+    match &power.cap_watts {
+        Observation::Value { value, .. } => write!(out, "{value:.0} W"),
+        Observation::Unavailable { state, observed_at } => {
+            write_unavailable(out, state, *observed_at, sampled_at)
+        }
+    }
+}
+
+fn write_u64_observation(
+    out: &mut (impl Write + ?Sized),
+    observation: &Observation<u64>,
+    sampled_at: Timestamp,
+    gib: bool,
+) -> io::Result<()> {
+    match observation {
+        Observation::Value { value, .. } if gib => write!(out, "{} GiB", Gib(*value)),
+        Observation::Value { value, .. } => write!(out, "{value}"),
         Observation::Unavailable { state, observed_at } => {
             write_unavailable(out, state, *observed_at, sampled_at)
         }
@@ -321,8 +347,8 @@ mod tests {
                 "memory 182.4/192.0 GiB",
                 "VRAM",
                 "(95%)",
-                "hotspot 74/95°C",
-                "power 318/320 W",
+                "hotspot 74°C / limit 95°C",
+                "power 318 W / cap 320 W",
                 "clock 1700 MHz",
                 "no active limits or faults",
             ],
@@ -358,9 +384,9 @@ mod tests {
             &line,
             &[
                 "activity unsupported hardware",
-                "memory VRAM unsupported driver version",
-                "hotspot permission denied",
-                "power asleep",
+                "memory used unsupported driver version",
+                "hotspot permission denied / limit 95°C",
+                "power asleep / cap 320 W",
                 "clock source error",
             ],
         );
@@ -419,21 +445,32 @@ mod tests {
         gpu.partitions[0].memory.used_bytes = Observation::stale(last_good);
         let line = once_line(&gpu);
         assert!(
-            line.contains("memory VRAM stale 62.0s"),
+            line.contains("memory used stale 62.0s"),
             "stale memory phrase missing: {line:?}"
         );
     }
 
     #[test]
-    fn unavailable_limits_are_omitted_not_phrased() {
+    fn unavailable_limits_are_explicitly_phrased() {
         let mut gpu = gpu();
         gpu.temperature.limit_celsius = Observation::unavailable(ObservationState::ASLEEP);
         gpu.power.cap_watts = Observation::unavailable(ObservationState::ASLEEP);
         let line = once_line(&gpu);
-        assert!(line.contains("hotspot 74°C"), "{line:?}");
-        assert!(line.contains("power 318 W"), "{line:?}");
-        assert!(!line.contains("74/"), "{line:?}");
-        assert!(!line.contains("318/"), "{line:?}");
+        assert!(line.contains("hotspot 74°C / limit asleep"), "{line:?}");
+        assert!(line.contains("power 318 W / cap asleep"), "{line:?}");
+    }
+
+    #[test]
+    fn unavailable_occupancy_is_explicitly_phrased() {
+        let mut gpu = gpu();
+        gpu.partitions[0].memory.occupancy_percent =
+            Observation::unavailable(ObservationState::SOURCE_ERROR);
+        let line = once_line(&gpu);
+        assert!(
+            line.contains("memory 182.4/192.0 GiB VRAM (occupancy source error)"),
+            "{line:?}"
+        );
+        assert!(!line.contains("(0"), "{line:?}");
     }
 
     #[test]
@@ -465,7 +502,7 @@ mod tests {
                 "gpu 0 AMD Instinct MI300X [0000:41:00.0]",
                 "activity 97%",
                 "memory 182.4/192.0 GiB",
-                "hotspot 74/95°C",
+                "hotspot 74°C / limit 95°C",
                 "no active limits or faults",
             ],
         );

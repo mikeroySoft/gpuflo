@@ -315,17 +315,18 @@ fn indep_reasons(indep: u64) -> Vec<&'static str> {
 // Discovery
 // ---------------------------------------------------------------------------
 
-/// KFD `FB_PUBLIC` heap type: an APU framebuffer carved from system memory.
+/// KFD framebuffer heap types.
+const KFD_HEAP_FB_PRIVATE: u64 = 1;
 const KFD_HEAP_FB_PUBLIC: u64 = 2;
 
 /// Maps PCI BDFs to their KFD framebuffer heap type, when the world-readable
 /// KFD topology is present. `heap_type 2` (FB_PUBLIC) identifies an APU;
 /// `heap_type 1` (FB_PRIVATE) identifies dedicated discrete VRAM.
 fn kfd_heap_types(root: &Path) -> HashMap<PciBdf, u64> {
-    let mut map = HashMap::new();
+    let mut evidence: HashMap<PciBdf, Vec<u64>> = HashMap::new();
     let nodes = root.join("sys/class/kfd/kfd/topology/nodes");
     let Ok(entries) = std::fs::read_dir(&nodes) else {
-        return map;
+        return HashMap::new();
     };
     for entry in entries.flatten() {
         let dir = entry.path();
@@ -353,6 +354,8 @@ fn kfd_heap_types(root: &Path) -> HashMap<PciBdf, u64> {
         let Ok(banks) = std::fs::read_dir(dir.join("mem_banks")) else {
             continue;
         };
+        let mut framebuffer = None;
+        let mut ambiguous = false;
         for bank in banks.flatten() {
             let Ok(bank_properties) = std::fs::read_to_string(bank.path().join("properties"))
             else {
@@ -361,15 +364,24 @@ fn kfd_heap_types(root: &Path) -> HashMap<PciBdf, u64> {
             for line in bank_properties.lines() {
                 let mut parts = line.split_whitespace();
                 if let (Some("heap_type"), Some(value)) = (parts.next(), parts.next())
-                    && let Ok(heap) = value.parse::<u64>()
-                    && heap != 0
+                    && let Ok(heap @ (KFD_HEAP_FB_PRIVATE | KFD_HEAP_FB_PUBLIC)) =
+                        value.parse::<u64>()
                 {
-                    map.insert(bdf.clone(), heap);
+                    match framebuffer {
+                        None => framebuffer = Some(heap),
+                        Some(_) => ambiguous = true,
+                    }
                 }
             }
         }
+        if !ambiguous && let Some(heap) = framebuffer {
+            evidence.entry(bdf).or_default().push(heap);
+        }
     }
-    map
+    evidence
+        .into_iter()
+        .filter_map(|(bdf, heaps)| (heaps.len() == 1).then(|| (bdf, heaps[0])))
+        .collect()
 }
 
 /// Resolved read paths for one XCP partition device.
@@ -423,14 +435,15 @@ impl KernelSource {
     }
 
     /// Discovers AMD PCI/DRM devices bound to `amdgpu`, groups XCP partition
-    /// functions into physical GPUs, and resolves collection paths.
-    pub fn discover(&self) -> Vec<KernelDevice> {
+    /// functions into physical GPUs, and resolves collection paths. A failed
+    /// or partial scan is an error and must never confirm removals.
+    pub fn discover(&self) -> Result<Vec<KernelDevice>, String> {
         let drm = self.root.join("sys/class/drm");
-        let Ok(entries) = std::fs::read_dir(&drm) else {
-            return Vec::new();
-        };
+        let entries = std::fs::read_dir(&drm)
+            .map_err(|error| format!("cannot read {}: {error}", drm.display()))?;
         let mut cards: Vec<CardEntry> = Vec::new();
-        for entry in entries.flatten() {
+        for entry in entries {
+            let entry = entry.map_err(|error| format!("incomplete DRM scan: {error}"))?;
             let name = entry.file_name();
             let Some(name) = name.to_str() else { continue };
             if !name
@@ -440,10 +453,9 @@ impl KernelSource {
                 continue;
             }
             let device = entry.path().join("device");
-            let Some(card) = probe_card(&device) else {
-                continue;
-            };
-            cards.push(card);
+            if let Some(card) = probe_card(&device)? {
+                cards.push(card);
+            }
         }
         // Group partition functions of one package by domain:bus:device.
         cards.sort_by(|a, b| a.bdf.as_str().cmp(b.bdf.as_str()));
@@ -457,10 +469,10 @@ impl KernelSource {
                 group_end += 1;
             }
             let group = &cards[index..group_end];
-            devices.push(build_device(group, &heap_types));
+            devices.push(build_device(group, &heap_types)?);
             index = group_end;
         }
-        devices
+        Ok(devices)
     }
 
     /// Fast collection: one coherent `gpu_metrics` read merged with stable
@@ -468,6 +480,29 @@ impl KernelSource {
     pub fn collect_fast(&mut self, device: &KernelDevice) -> KernelFastSample {
         let read_wall = Timestamp::now();
         let read_mono = Instant::now();
+        if !device.primary.exists() {
+            return KernelFastSample {
+                gpu: device.disc.id.clone(),
+                read_wall,
+                read_mono,
+                device_missing: true,
+                hotspot_millic: Reading::Error,
+                socket_power_microwatts: Reading::Error,
+                energy: None,
+                partitions: device
+                    .partitions
+                    .iter()
+                    .map(|part| KernelPartitionFast {
+                        partition: part.id.clone(),
+                        is_primary: part.is_primary,
+                        activity_centipercent: Reading::Error,
+                        mem_used_bytes: Reading::Error,
+                        mem_total_bytes: Reading::Error,
+                        mem_ctl_centipercent: Reading::Error,
+                    })
+                    .collect(),
+            };
+        }
         let blob = self.read_blob(device);
 
         let (hotspot, power, energy, blob_activity, blob_umc) = match &blob {
@@ -496,15 +531,19 @@ impl KernelSource {
             .partitions
             .iter()
             .map(|part| {
-                let activity_text =
-                    || read_u64(&part.device.join("gpu_busy_percent")).map(|p| p * 100);
+                let activity_text = || {
+                    read_u64(&part.device.join("gpu_busy_percent"))
+                        .checked_map(|p| p.checked_mul(100))
+                };
                 let activity = if part.is_primary {
                     blob_activity.or_else(activity_text)
                 } else {
                     activity_text()
                 };
-                let mem_ctl_text =
-                    || read_u64(&part.device.join("mem_busy_percent")).map(|p| p * 100);
+                let mem_ctl_text = || {
+                    read_u64(&part.device.join("mem_busy_percent"))
+                        .checked_map(|p| p.checked_mul(100))
+                };
                 let mem_ctl = if part.is_primary {
                     blob_umc.or_else(mem_ctl_text)
                 } else {
@@ -525,6 +564,7 @@ impl KernelSource {
             gpu: device.disc.id.clone(),
             read_wall,
             read_mono,
+            device_missing: false,
             hotspot_millic: validate_millic(hotspot),
             socket_power_microwatts: validate_microwatts(power),
             energy,
@@ -536,6 +576,26 @@ impl KernelSource {
     pub fn collect_slow(&mut self, device: &KernelDevice) -> KernelSlowSample {
         let read_wall = Timestamp::now();
         let read_mono = Instant::now();
+        if !device.primary.exists() {
+            return KernelSlowSample {
+                gpu: device.disc.id.clone(),
+                read_wall,
+                read_mono,
+                device_missing: true,
+                limit_millic: Reading::Error,
+                cap_microwatts: Reading::Error,
+                partitions: device
+                    .partitions
+                    .iter()
+                    .map(|part| KernelPartitionSlow {
+                        partition: part.id.clone(),
+                        is_primary: part.is_primary,
+                        gfx_clock_hz: Reading::Error,
+                    })
+                    .collect(),
+                health: Vec::new(),
+            };
+        }
 
         let limit = self.hwmon_hotspot_limit(device);
         let cap = match &device.hwmon {
@@ -579,6 +639,7 @@ impl KernelSource {
         KernelSlowSample {
             gpu: device.disc.id.clone(),
             read_wall,
+            device_missing: false,
             read_mono,
             limit_millic: validate_millic(limit),
             cap_microwatts: validate_microwatts(cap),
@@ -737,9 +798,11 @@ enum BlobRead {
     Unavailable(Reading<()>),
 }
 
-/// Probes one card device directory; `None` when it is not an amdgpu PCI GPU.
-fn probe_card(device: &Path) -> Option<CardEntry> {
-    let uevent = std::fs::read_to_string(device.join("uevent")).ok()?;
+/// Probes one card device directory. `Ok(None)` is a complete scan of a card
+/// not bound to amdgpu; I/O/identity errors make the enclosing scan incomplete.
+fn probe_card(device: &Path) -> Result<Option<CardEntry>, String> {
+    let uevent = std::fs::read_to_string(device.join("uevent"))
+        .map_err(|error| format!("cannot read {}/uevent: {error}", device.display()))?;
     let mut driver = None;
     let mut slot = None;
     for line in uevent.lines() {
@@ -750,47 +813,77 @@ fn probe_card(device: &Path) -> Option<CardEntry> {
         }
     }
     if driver.as_deref() != Some("amdgpu") {
-        return None;
+        return Ok(None);
     }
-    let vendor = std::fs::read_to_string(device.join("vendor")).ok()?;
+    let vendor = std::fs::read_to_string(device.join("vendor"))
+        .map_err(|error| format!("cannot read {}/vendor: {error}", device.display()))?;
     if vendor.trim() != "0x1002" {
-        return None;
+        return Ok(None);
     }
-    let bdf = PciBdf::parse(&slot?).ok()?;
+    let slot =
+        slot.ok_or_else(|| format!("missing PCI_SLOT_NAME in {}/uevent", device.display()))?;
+    let bdf = PciBdf::parse(&slot)
+        .map_err(|error| format!("invalid PCI identity in {}: {error}", device.display()))?;
     let has_gpu_metrics = device.join("gpu_metrics").exists();
-    Some(CardEntry {
+    Ok(Some(CardEntry {
         device: device.to_owned(),
         bdf,
         has_gpu_metrics,
-    })
+    }))
+}
+
+/// Replaces source-owned terminal controls before identity/display use.
+fn safe_source_text(text: &str) -> String {
+    text.trim()
+        .chars()
+        .map(|c| if c.is_control() { '\u{fffd}' } else { c })
+        .collect()
 }
 
 /// Builds one physical GPU from its sorted partition-function group.
-fn build_device(group: &[CardEntry], heap_types: &HashMap<PciBdf, u64>) -> KernelDevice {
-    // The primary partition owns the device-wide gpu_metrics node; fall back
-    // to the lowest function when none carries one.
-    let primary_index = group
+fn build_device(
+    group: &[CardEntry],
+    heap_types: &HashMap<PciBdf, u64>,
+) -> Result<KernelDevice, String> {
+    let owners: Vec<_> = group
         .iter()
-        .position(|card| card.has_gpu_metrics)
-        .unwrap_or(0);
+        .enumerate()
+        .filter(|(_, card)| card.has_gpu_metrics)
+        .collect();
+    if owners.len() > 1 {
+        return Err(format!(
+            "multiple primary gpu_metrics owners for package {}",
+            &group[0].bdf.as_str()[..10]
+        ));
+    }
+    let primary_index = owners.first().map(|(index, _)| *index).unwrap_or(0);
     let primary = &group[primary_index];
-
-    let unique_id = std::fs::read_to_string(primary.device.join("unique_id"))
-        .ok()
-        .map(|s| s.trim().to_owned())
-        .filter(|s| !s.is_empty());
+    let package_bdf = PciBdf::parse(&format!("{}.0", &group[0].bdf.as_str()[..10]))
+        .map_err(|error| error.to_string())?;
+    let mut unique_ids: Vec<String> = group
+        .iter()
+        .filter_map(|card| {
+            std::fs::read_to_string(card.device.join("unique_id"))
+                .ok()
+                .map(|value| safe_source_text(&value))
+                .filter(|value| !value.is_empty())
+        })
+        .collect();
+    unique_ids.sort();
+    unique_ids.dedup();
+    let unique_id = (unique_ids.len() == 1).then(|| unique_ids.remove(0));
     let serial = std::fs::read_to_string(primary.device.join("serial_number"))
         .ok()
-        .map(|s| s.trim().to_owned())
+        .map(|s| safe_source_text(&s))
         .filter(|s| !s.is_empty());
     let gpu_id = match &unique_id {
         Some(unique) => PhysicalGpuId::new(format!("gpu-{unique}")),
-        None => PhysicalGpuId::new(format!("gpu-{}", primary.bdf)),
+        None => PhysicalGpuId::new(format!("gpu-{package_bdf}")),
     };
 
     let name = std::fs::read_to_string(primary.device.join("product_name"))
         .ok()
-        .map(|s| s.trim().to_owned())
+        .map(|s| safe_source_text(&s))
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| {
             let device_id = std::fs::read_to_string(primary.device.join("device"))
@@ -803,33 +896,24 @@ fn build_device(group: &[CardEntry], heap_types: &HashMap<PciBdf, u64>) -> Kerne
             }
         });
 
-    // The applicable pool. An APU must label its system-memory pool as GTT
-    // instead of presenting the carveout as dedicated VRAM. Primary evidence
-    // is the world-readable KFD topology heap type (FB_PUBLIC identifies an
-    // APU framebuffer); without KFD topology, a small carveout-sized VRAM
-    // pool beside a larger GTT pool is the fallback evidence. A discrete GPU
-    // whose GTT pool merely exceeds VRAM (large system RAM) stays VRAM.
-    let vram_total = match read_u64(&primary.device.join("mem_info_vram_total")) {
-        Reading::Value(v) => v,
-        _ => 0,
+    // KFD heap topology is explicit physical-memory evidence. Without it,
+    // preserve an unknown-safe pool label rather than guessing APU/discrete
+    // from capacity; the stable VRAM nodes remain the conservative source.
+    let mut package_heaps: Vec<u64> = group
+        .iter()
+        .filter_map(|card| heap_types.get(&card.bdf).copied())
+        .collect();
+    package_heaps.sort_unstable();
+    package_heaps.dedup();
+    let pool = match package_heaps.as_slice() {
+        [KFD_HEAP_FB_PUBLIC] => MemoryPool::GTT,
+        [KFD_HEAP_FB_PRIVATE] => MemoryPool::VRAM,
+        _ => MemoryPool::new("unknown"),
     };
-    let gtt_total = match read_u64(&primary.device.join("mem_info_gtt_total")) {
-        Reading::Value(v) => v,
-        _ => 0,
-    };
-    const CARVEOUT_LIMIT: u64 = 4 * 1024 * 1024 * 1024;
-    let is_apu_pool = match heap_types.get(&primary.bdf) {
-        Some(&heap) => heap == KFD_HEAP_FB_PUBLIC,
-        None => vram_total <= CARVEOUT_LIMIT && gtt_total > vram_total,
-    };
-    let (pool, used_node, total_node) = if is_apu_pool {
-        (MemoryPool::GTT, "mem_info_gtt_used", "mem_info_gtt_total")
+    let (used_node, total_node) = if pool == MemoryPool::GTT {
+        ("mem_info_gtt_used", "mem_info_gtt_total")
     } else {
-        (
-            MemoryPool::VRAM,
-            "mem_info_vram_used",
-            "mem_info_vram_total",
-        )
+        ("mem_info_vram_used", "mem_info_vram_total")
     };
 
     let hwmon = std::fs::read_dir(primary.device.join("hwmon"))
@@ -850,9 +934,8 @@ fn build_device(group: &[CardEntry], heap_types: &HashMap<PciBdf, u64>) -> Kerne
 
     let partitions: Vec<PartitionPaths> = group
         .iter()
-        .enumerate()
-        .map(|(index, card)| PartitionPaths {
-            id: PartitionId::new(format!("{gpu_id}-xcp-{index}")),
+        .map(|card| PartitionPaths {
+            id: PartitionId::new(format!("{gpu_id}-xcp-{}", card.bdf)),
             is_primary: std::ptr::eq(card, primary),
             bdf: card.bdf.clone(),
             device: card.device.clone(),
@@ -861,10 +944,10 @@ fn build_device(group: &[CardEntry], heap_types: &HashMap<PciBdf, u64>) -> Kerne
         })
         .collect();
 
-    KernelDevice {
+    Ok(KernelDevice {
         disc: DiscoveredGpu {
             id: gpu_id,
-            bdf: primary.bdf.clone(),
+            bdf: package_bdf,
             name,
             uuid: unique_id.map(|u| format!("amdgpu-{u}")),
             serial,
@@ -882,7 +965,7 @@ fn build_device(group: &[CardEntry], heap_types: &HashMap<PciBdf, u64>) -> Kerne
         hwmon,
         hotspot_channel,
         partitions,
-    }
+    })
 }
 
 /// Domain validation without clamping: out-of-domain values are malformed.
@@ -919,7 +1002,7 @@ mod tests {
 
     fn source(scenario: &str) -> (KernelSource, Vec<KernelDevice>) {
         let source = KernelSource::new(fixture(scenario));
-        let devices = source.discover();
+        let devices = source.discover().unwrap();
         (source, devices)
     }
 
@@ -944,7 +1027,7 @@ mod tests {
     #[test]
     fn discovery_on_empty_root_finds_nothing() {
         let source = KernelSource::new(PathBuf::from("/nonexistent-gruflo-root"));
-        assert!(source.discover().is_empty());
+        assert!(source.discover().is_err());
     }
 
     #[test]

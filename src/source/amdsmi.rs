@@ -26,9 +26,12 @@ const STATUS_NOT_SUPPORTED: u32 = 2;
 const STATUS_NO_PERM: u32 = 10;
 /// `AMDSMI_PROCESSOR_TYPE_AMD_GPU`.
 const PROCESSOR_TYPE_AMD_GPU: u32 = 1;
-/// Library version years this build claims ABI knowledge of. Unknown future
-/// years disable enrichment rather than gamble on struct layouts.
-const KNOWN_VERSION_YEARS: std::ops::RangeInclusive<u32> = 23..=27;
+/// Exact AMD SMI header ABI verified by this adapter (ROCm 6.3.3,
+/// `amdsmi_version_t` 25.1 and ELF SONAME 24).
+const KNOWN_ABI: (u32, u32) = (25, 1);
+/// Plausibility bound for vendor-library enumeration. Larger counts disable
+/// optional enrichment instead of attempting an attacker-sized allocation.
+const MAX_ENUM_HANDLES: u32 = 1024;
 
 /// `amdsmi_version_t`: size 24, align 8 on LP64.
 #[repr(C)]
@@ -86,8 +89,8 @@ pub(crate) enum AmdSmiUnavailable {
     LibraryNotFound,
     #[error("AMD SMI library is missing required symbol {0}")]
     MissingSymbol(String),
-    #[error("AMD SMI library version year {0} is not ABI-known to this build")]
-    IncompatibleVersion(u32),
+    #[error("AMD SMI library version {0}.{1} is not ABI-known to this build")]
+    IncompatibleVersion(u32, u32),
     #[error("AMD SMI initialization failed with status {0}")]
     InitFailed(u32),
     #[error("AMD SMI enumeration failed with status {0}")]
@@ -125,16 +128,10 @@ pub(crate) struct AmdSmi {
 unsafe impl Send for AmdSmi {}
 
 impl AmdSmi {
-    /// Attempts the known SONAMEs, newest ABI first, then the unversioned
-    /// development name.
+    /// Attempts only the verified ABI-major SONAME, then the unversioned
+    /// development name (which is still rejected unless its API tuple matches).
     pub fn load() -> Result<Self, AmdSmiUnavailable> {
-        Self::load_from(&[
-            "libamd_smi.so.27",
-            "libamd_smi.so.26",
-            "libamd_smi.so.25",
-            "libamd_smi.so.24",
-            "libamd_smi.so",
-        ])
+        Self::load_from(&["libamd_smi.so.24", "libamd_smi.so"])
     }
 
     /// Loads from explicit candidates (test seam uses file paths).
@@ -175,7 +172,12 @@ impl AmdSmi {
             get_vram_usage: symbol!(b"amdsmi_get_gpu_vram_usage\0"),
         };
 
-        // Validate the ABI year before initializing anything.
+        // AMD SMI requires initialization before get_lib_version.
+        // SAFETY: init takes the documented flag word; called exactly once.
+        let status = unsafe { (api.init)(INIT_AMD_GPUS) };
+        if status != STATUS_SUCCESS {
+            return Err(AmdSmiUnavailable::InitFailed(status));
+        }
         let mut version = CVersion {
             year: 0,
             major: 0,
@@ -183,19 +185,20 @@ impl AmdSmi {
             release: 0,
             build: std::ptr::null(),
         };
-        // SAFETY: out-pointer to an owned, correctly sized CVersion.
+        // SAFETY: initialized library; out-pointer to a correctly sized struct.
         let status = unsafe { get_lib_version(&mut version) };
         if status != STATUS_SUCCESS {
+            // SAFETY: balances the successful initialization above.
+            unsafe { (api.shut_down)() };
             return Err(AmdSmiUnavailable::InitFailed(status));
         }
-        if !KNOWN_VERSION_YEARS.contains(&version.year) {
-            return Err(AmdSmiUnavailable::IncompatibleVersion(version.year));
-        }
-
-        // SAFETY: init takes the documented flag word; called exactly once.
-        let status = unsafe { (api.init)(INIT_AMD_GPUS) };
-        if status != STATUS_SUCCESS {
-            return Err(AmdSmiUnavailable::InitFailed(status));
+        if (version.year, version.major) != KNOWN_ABI {
+            // SAFETY: balances the successful initialization above.
+            unsafe { (api.shut_down)() };
+            return Err(AmdSmiUnavailable::IncompatibleVersion(
+                version.year,
+                version.major,
+            ));
         }
 
         let mut loaded = Self {
@@ -225,12 +228,16 @@ impl AmdSmi {
         if status != STATUS_SUCCESS {
             return Err(AmdSmiUnavailable::EnumerationFailed(status));
         }
-        let mut sockets = vec![std::ptr::null_mut(); socket_count as usize];
+        if socket_count > MAX_ENUM_HANDLES {
+            return Err(AmdSmiUnavailable::EnumerationFailed(42));
+        }
+        let socket_capacity = socket_count;
+        let mut sockets = vec![std::ptr::null_mut(); socket_capacity as usize];
         // SAFETY: buffer sized to the returned capacity.
         let status =
             unsafe { (self.api.get_socket_handles)(&mut socket_count, sockets.as_mut_ptr()) };
-        if status != STATUS_SUCCESS {
-            return Err(AmdSmiUnavailable::EnumerationFailed(status));
+        if status != STATUS_SUCCESS || socket_count > socket_capacity {
+            return Err(AmdSmiUnavailable::EnumerationFailed(status.max(42)));
         }
         sockets.truncate(socket_count as usize);
 
@@ -244,12 +251,16 @@ impl AmdSmi {
             if status != STATUS_SUCCESS {
                 continue; // One bad socket does not disable enrichment.
             }
-            let mut handles = vec![std::ptr::null_mut(); count as usize];
+            if count > MAX_ENUM_HANDLES {
+                continue;
+            }
+            let capacity = count;
+            let mut handles = vec![std::ptr::null_mut(); capacity as usize];
             // SAFETY: buffer sized to the returned capacity.
             let status = unsafe {
                 (self.api.get_processor_handles)(socket, &mut count, handles.as_mut_ptr())
             };
-            if status != STATUS_SUCCESS {
+            if status != STATUS_SUCCESS || count > capacity {
                 continue;
             }
             handles.truncate(count as usize);
@@ -372,11 +383,23 @@ fn decode_bdf(raw: u64) -> Result<PciBdf, crate::model::InvalidPciBdf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::fs::DirBuilderExt;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static TEMP_ID: AtomicU64 = AtomicU64::new(0);
 
     /// Builds a tiny test-only shared library exporting the AMD SMI surface.
     fn build_fake(name: &str, source: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("gruflo-amdsmi-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = loop {
+            let id = TEMP_ID.fetch_add(1, Ordering::Relaxed);
+            let path =
+                std::env::temp_dir().join(format!("gruflo-amdsmi-{}-{id}", std::process::id()));
+            match std::fs::DirBuilder::new().mode(0o700).create(&path) {
+                Ok(()) => break path,
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => panic!("cannot create test directory: {error}"),
+            }
+        };
         let c_path = dir.join(format!("{name}.c"));
         let so_path = dir.join(format!("lib{name}.so"));
         std::fs::write(&c_path, source).unwrap();
@@ -402,6 +425,7 @@ static int initialized = 0;
 static int handle_token = 42;
 
 uint32_t amdsmi_get_lib_version(ver_t *v) {
+    if (!initialized) return 32;
     v->year = 25; v->major = 1; v->minor = 0; v->release = 0; v->build = "25.1.0.0";
     return 0;
 }
@@ -475,14 +499,26 @@ uint32_t amdsmi_get_gpu_vram_usage(void *handle, vram_t *vram) {
     }
 
     #[test]
-    fn unknown_version_year_disables_enrichment_before_init() {
+    fn unknown_version_disables_enrichment_and_balances_shutdown() {
         let source = GOOD_LIBRARY.replace("v->year = 25", "v->year = 99");
         let path = build_fake("gruflo_fake_badver", &source);
         let result = AmdSmi::load_from(&[path.to_str().unwrap()]);
         assert_eq!(
             result.err(),
-            Some(AmdSmiUnavailable::IncompatibleVersion(99))
+            Some(AmdSmiUnavailable::IncompatibleVersion(99, 1))
         );
+    }
+
+    #[test]
+    fn implausible_enumeration_count_disables_enrichment() {
+        let source = GOOD_LIBRARY.replacen(
+            "if (handles == NULL) { *count = 1; return 0; }",
+            "if (handles == NULL) { *count = 0xFFFFFFFF; return 0; }",
+            1,
+        );
+        let path = build_fake("gruflo_fake_huge_count", &source);
+        let result = AmdSmi::load_from(&[path.to_str().unwrap()]);
+        assert_eq!(result.err(), Some(AmdSmiUnavailable::EnumerationFailed(42)));
     }
 
     #[test]

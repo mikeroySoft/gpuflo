@@ -69,8 +69,8 @@ impl<O: TerminalOps> TerminalGuard<O> {
             return Err(error);
         }
         if let Err(error) = ops.hide_cursor() {
-            let _ = ops.leave_alternate_screen();
             let _ = ops.disable_raw();
+            let _ = ops.leave_alternate_screen();
             return Err(error);
         }
         Ok(Self {
@@ -220,7 +220,7 @@ mod tests {
     }
 
     #[test]
-    fn failed_third_stage_unwinds_screen_then_raw() {
+    fn failed_third_stage_unwinds_raw_then_screen() {
         let ops = FakeOps::new(Some("hide_cursor"));
         assert!(TerminalGuard::acquire(ops.clone()).is_err());
         assert_eq!(
@@ -229,8 +229,8 @@ mod tests {
                 "enable_raw",
                 "enter_alt",
                 "hide_cursor",
-                "leave_alt",
                 "disable_raw",
+                "leave_alt",
             ]
         );
     }

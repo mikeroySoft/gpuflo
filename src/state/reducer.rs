@@ -13,7 +13,7 @@ use super::{
 };
 use crate::model::{
     Health, HealthCategory, Memory, Observation, ObservationState, Partition, PhysicalGpu,
-    Snapshot, Timestamp,
+    PhysicalGpuId, Snapshot, Timestamp,
 };
 
 /// One coherent pair of wall and monotonic time.
@@ -45,10 +45,11 @@ enum CellState {
         origin: Origin,
         lane: Lane,
     },
-    /// No current value; `last_good` is retained only for `stale`.
+    /// No current value.
     Unavailable {
         state: ObservationState,
         last_good: Option<Timestamp>,
+        origin: Origin,
     },
 }
 
@@ -56,8 +57,10 @@ enum CellState {
 #[derive(Debug, Clone)]
 struct Cell {
     state: CellState,
-    /// Most recent explicit read failure while a fresh value was retained.
-    last_failure: Option<ObservationState>,
+    /// Most recent kernel read failure while a fresh value was retained.
+    last_failure: Option<(ObservationState, Timestamp)>,
+    /// Time of the most recent source attempt represented by this cell.
+    last_attempt_wall: Option<Timestamp>,
 }
 
 impl Cell {
@@ -65,6 +68,7 @@ impl Cell {
         Self {
             state: CellState::Empty,
             last_failure: None,
+            last_attempt_wall: None,
         }
     }
 
@@ -80,19 +84,25 @@ impl Cell {
     ) -> Option<Value> {
         match outcome {
             Ok(value) => {
-                // Kernel-first: optional enrichment never overwrites a fresh
-                // kernel observation, regardless of which is newer.
-                if origin == Origin::AmdSmi
-                    && let CellState::Fresh {
-                        origin: Origin::Kernel,
-                        mono: k_mono,
-                        lane: k_lane,
-                        ..
-                    } = &self.state
-                    && mono.duration_since(*k_mono) <= k_lane.stale_after()
-                {
-                    return None;
+                if origin == Origin::AmdSmi {
+                    let may_enrich = match &self.state {
+                        CellState::Empty => true,
+                        CellState::Fresh {
+                            origin: Origin::AmdSmi,
+                            ..
+                        } => true,
+                        CellState::Unavailable {
+                            state,
+                            origin: Origin::Kernel,
+                            ..
+                        } => state == &ObservationState::UNSUPPORTED_HARDWARE,
+                        _ => false,
+                    };
+                    if !may_enrich {
+                        return None;
+                    }
                 }
+                self.last_attempt_wall = Some(wall);
                 self.state = CellState::Fresh {
                     value: *value,
                     wall,
@@ -104,14 +114,31 @@ impl Cell {
                 Some(*value)
             }
             Err(state) => {
+                // Optional-source failures never mutate authoritative kernel
+                // state or a prior enrichment value.
+                if origin == Origin::AmdSmi {
+                    return None;
+                }
+                self.last_attempt_wall = Some(wall);
                 match &self.state {
-                    // Retain a fresh value; the freshness evaluation decides
-                    // when the failure becomes visible.
-                    CellState::Fresh { .. } => self.last_failure = Some(state.clone()),
+                    CellState::Fresh {
+                        origin: Origin::Kernel,
+                        ..
+                    } => self.last_failure = Some((state.clone(), wall)),
+                    CellState::Fresh {
+                        origin: Origin::AmdSmi,
+                        ..
+                    } if state == &ObservationState::UNSUPPORTED_HARDWARE => {}
+                    CellState::Unavailable { state: current, .. }
+                        if current == &ObservationState::STALE =>
+                    {
+                        self.last_failure = Some((state.clone(), wall));
+                    }
                     _ => {
                         self.state = CellState::Unavailable {
                             state: state.clone(),
                             last_good: None,
+                            origin: Origin::Kernel,
                         };
                         self.last_failure = None;
                     }
@@ -121,24 +148,24 @@ impl Cell {
         }
     }
 
-    /// Applies the freshness rule at `now`: a value past `max(1s, 3×cadence)`
-    /// becomes its explicit failure state when one was observed, otherwise
-    /// `stale` retaining the last good source time.
+    /// Applies the freshness rule at `now`: a previously good value always
+    /// expires to `stale` with its last good source time. Failure evidence is
+    /// retained separately for health/source diagnostics while the value is
+    /// still fresh.
     fn evaluate(&mut self, now_mono: Instant) {
         if let CellState::Fresh {
-            mono, lane, wall, ..
+            mono,
+            lane,
+            wall,
+            origin,
+            ..
         } = &self.state
-            && now_mono.duration_since(*mono) > lane.stale_after()
+            && now_mono.duration_since(*mono) >= lane.stale_after()
         {
-            self.state = match self.last_failure.take() {
-                Some(state) => CellState::Unavailable {
-                    state,
-                    last_good: None,
-                },
-                None => CellState::Unavailable {
-                    state: ObservationState::STALE,
-                    last_good: Some(*wall),
-                },
+            self.state = CellState::Unavailable {
+                state: ObservationState::STALE,
+                last_good: Some(*wall),
+                origin: *origin,
             };
         }
     }
@@ -173,7 +200,9 @@ impl Cell {
     fn unavailable(&self) -> Observation<f64> {
         match &self.state {
             CellState::Empty => Observation::unavailable(ObservationState::SOURCE_ERROR),
-            CellState::Unavailable { state, last_good } => Observation::Unavailable {
+            CellState::Unavailable {
+                state, last_good, ..
+            } => Observation::Unavailable {
                 state: state.clone(),
                 observed_at: *last_good,
             },
@@ -193,7 +222,9 @@ impl Cell {
             Some((value, wall)) => Observation::value(value, wall),
             None => match &self.state {
                 CellState::Empty => Observation::unavailable(ObservationState::SOURCE_ERROR),
-                CellState::Unavailable { state, last_good } => Observation::Unavailable {
+                CellState::Unavailable {
+                    state, last_good, ..
+                } => Observation::Unavailable {
                     state: state.clone(),
                     observed_at: *last_good,
                 },
@@ -205,12 +236,51 @@ impl Cell {
     /// The state feeding a derived telemetry health candidate, if any.
     fn trouble(&self) -> Option<(&ObservationState, Option<Timestamp>)> {
         match &self.state {
-            CellState::Unavailable { state, last_good } => match state.as_str() {
-                // Structural capability is not telemetry trouble.
-                "unsupported_hardware" | "reported_by_primary_partition" => None,
-                _ => Some((state, *last_good)),
-            },
+            CellState::Empty => Some((&ObservationState::SOURCE_ERROR, self.last_attempt_wall)),
+            CellState::Unavailable {
+                state, last_good, ..
+            } if state != &ObservationState::REPORTED_BY_PRIMARY_PARTITION => {
+                Some((state, last_good.or(self.last_attempt_wall)))
+            }
+            CellState::Fresh { .. } => self
+                .last_failure
+                .as_ref()
+                .map(|(state, at)| (state, Some(*at))),
             _ => None,
+        }
+    }
+
+    fn record_failure(&mut self, state: ObservationState, wall: Timestamp, origin: Origin) {
+        self.last_attempt_wall = Some(wall);
+        match &self.state {
+            CellState::Fresh { .. } => {
+                self.last_failure = Some((state, wall));
+            }
+            CellState::Unavailable { state: current, .. }
+                if current == &ObservationState::STALE =>
+            {
+                self.last_failure = Some((state, wall));
+            }
+            CellState::Empty | CellState::Unavailable { .. } => {
+                self.state = CellState::Unavailable {
+                    state,
+                    last_good: None,
+                    origin,
+                };
+                self.last_failure = None;
+            }
+        }
+    }
+
+    fn timeout(&mut self, wall: Timestamp) {
+        self.record_failure(ObservationState::SOURCE_ERROR, wall, Origin::Kernel);
+    }
+
+    fn health_time(&self) -> Option<Timestamp> {
+        match &self.state {
+            CellState::Fresh { wall, .. } => Some(*wall),
+            CellState::Unavailable { last_good, .. } => last_good.or(self.last_attempt_wall),
+            CellState::Empty => self.last_attempt_wall,
         }
     }
 }
@@ -259,6 +329,19 @@ impl PartState {
 }
 
 #[derive(Debug)]
+struct StoredHealthReport {
+    candidates: Vec<HealthCandidate>,
+    observed_mono: Instant,
+    lane: Lane,
+}
+
+impl StoredHealthReport {
+    fn active(&self, now: Instant) -> bool {
+        now.duration_since(self.observed_mono) < self.lane.stale_after()
+    }
+}
+
+#[derive(Debug)]
 struct GpuState {
     disc: DiscoveredGpu,
     hotspot: Cell,
@@ -266,8 +349,8 @@ struct GpuState {
     power: Cell,
     power_cap: Cell,
     partitions: Vec<PartState>,
-    kernel_health: Vec<HealthCandidate>,
-    amdsmi_health: Vec<HealthCandidate>,
+    kernel_health: Option<StoredHealthReport>,
+    amdsmi_health: Option<StoredHealthReport>,
 }
 
 impl GpuState {
@@ -285,8 +368,8 @@ impl GpuState {
             power: Cell::new(),
             power_cap: Cell::new(),
             partitions,
-            kernel_health: Vec::new(),
-            amdsmi_health: Vec::new(),
+            kernel_health: None,
+            amdsmi_health: None,
         }
     }
 
@@ -334,9 +417,9 @@ impl Reducer {
             match self.gpus.iter().position(|g| g.disc.id == gpu.id) {
                 Some(index) => {
                     let mut existing = self.gpus.remove(index);
-                    let old: Vec<_> = existing.disc.partitions.iter().map(|p| &p.id).collect();
-                    let new: Vec<_> = gpu.partitions.iter().map(|p| &p.id).collect();
-                    if old != new {
+                    let topology_changed = existing.disc.pool != gpu.pool
+                        || existing.disc.partitions != gpu.partitions;
+                    if topology_changed {
                         effects.push(StateEffect::PartitionConfigurationChanged(gpu.id.clone()));
                     }
                     existing.disc = gpu;
@@ -356,7 +439,19 @@ impl Reducer {
     }
 
     /// Applies one normalized metric batch to the addressed scope.
+    #[cfg(test)]
     pub fn apply_batch(&mut self, batch: MetricBatch) {
+        self.apply_batch_at(batch, None);
+    }
+
+    /// Applies a batch at a coordinator monotonic time. A result already
+    /// beyond freshness is discarded before history/peak staging.
+    pub fn apply_batch_at(&mut self, batch: MetricBatch, now_mono: Option<Instant>) {
+        if now_mono
+            .is_some_and(|now| now.duration_since(batch.observed_mono) >= batch.lane.stale_after())
+        {
+            return;
+        }
         let Some(gpu) = self.gpus.iter_mut().find(|g| g.disc.id == batch.gpu) else {
             return; // Late result for a removed GPU: discard.
         };
@@ -387,36 +482,123 @@ impl Reducer {
                 else {
                     return;
                 };
-                let mut fresh_used: Option<u64> = None;
-                let mut fresh_total: Option<u64> = None;
+                let mut used_outcome = None;
+                let mut total_outcome = None;
                 for result in &batch.results {
                     let MetricKey::Partition(metric) = result.metric else {
                         continue;
                     };
-                    let accepted = part.cell(metric).apply(
-                        &result.outcome,
-                        batch.origin,
-                        batch.lane,
-                        batch.observed_wall,
-                        batch.observed_mono,
-                    );
-                    match (metric, accepted) {
-                        (PartitionMetric::ActivityPercent, Some(Value::F64(v))) => {
-                            part.staged_activity = Some(v);
+                    match metric {
+                        PartitionMetric::MemUsedBytes => {
+                            used_outcome = Some(result.outcome.clone());
                         }
-                        (PartitionMetric::MemUsedBytes, Some(Value::U64(v))) => {
-                            fresh_used = Some(v);
+                        PartitionMetric::MemTotalBytes => {
+                            total_outcome = Some(result.outcome.clone());
                         }
-                        (PartitionMetric::MemTotalBytes, Some(Value::U64(v))) => {
-                            fresh_total = Some(v);
+                        _ => {
+                            let accepted = part.cell(metric).apply(
+                                &result.outcome,
+                                batch.origin,
+                                batch.lane,
+                                batch.observed_wall,
+                                batch.observed_mono,
+                            );
+                            if let (PartitionMetric::ActivityPercent, Some(Value::F64(v))) =
+                                (metric, accepted)
+                            {
+                                part.staged_activity = Some(v);
+                            }
                         }
-                        _ => {}
                     }
                 }
-                if let (Some(used), Some(total)) = (fresh_used, fresh_total)
-                    && total > 0
-                {
-                    part.staged_memory = Some(used as f64 / total as f64 * 100.0);
+                match (used_outcome, total_outcome) {
+                    (Some(Ok(Value::U64(used))), Some(Ok(Value::U64(total))))
+                        if total > 0 && used <= total =>
+                    {
+                        let accepted_used = part.mem_used.apply(
+                            &Ok(Value::U64(used)),
+                            batch.origin,
+                            batch.lane,
+                            batch.observed_wall,
+                            batch.observed_mono,
+                        );
+                        let accepted_total = part.mem_total.apply(
+                            &Ok(Value::U64(total)),
+                            batch.origin,
+                            batch.lane,
+                            batch.observed_wall,
+                            batch.observed_mono,
+                        );
+                        if accepted_used.is_some() && accepted_total.is_some() {
+                            part.staged_memory = Some(used as f64 / total as f64 * 100.0);
+                        }
+                    }
+                    (Some(Err(used)), Some(Err(total))) => {
+                        part.mem_used.apply(
+                            &Err(used),
+                            batch.origin,
+                            batch.lane,
+                            batch.observed_wall,
+                            batch.observed_mono,
+                        );
+                        part.mem_total.apply(
+                            &Err(total),
+                            batch.origin,
+                            batch.lane,
+                            batch.observed_wall,
+                            batch.observed_mono,
+                        );
+                    }
+                    (None, None) => {}
+                    (used, total) => {
+                        let failure = used
+                            .as_ref()
+                            .and_then(|outcome| outcome.as_ref().err())
+                            .or_else(|| total.as_ref().and_then(|outcome| outcome.as_ref().err()))
+                            .cloned()
+                            .unwrap_or(ObservationState::SOURCE_ERROR);
+                        part.mem_used.record_failure(
+                            failure.clone(),
+                            batch.observed_wall,
+                            batch.origin,
+                        );
+                        part.mem_total
+                            .record_failure(failure, batch.observed_wall, batch.origin);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Applies a kernel operation timeout as a non-staging failure event.
+    /// Current values remain until freshness expiry; never-observed cells
+    /// become explicit source errors and contribute telemetry health.
+    pub fn apply_kernel_timeout(&mut self, gpu_id: &PhysicalGpuId, lane: Lane, now: Now) {
+        let Some(gpu) = self.gpus.iter_mut().find(|gpu| &gpu.disc.id == gpu_id) else {
+            return;
+        };
+        match lane {
+            Lane::Fast => {
+                for cell in [&mut gpu.hotspot, &mut gpu.power] {
+                    cell.timeout(now.wall);
+                }
+                for part in &mut gpu.partitions {
+                    for cell in [
+                        &mut part.activity,
+                        &mut part.mem_used,
+                        &mut part.mem_total,
+                        &mut part.mem_ctl,
+                    ] {
+                        cell.timeout(now.wall);
+                    }
+                }
+            }
+            Lane::Slow => {
+                for cell in [&mut gpu.temp_limit, &mut gpu.power_cap] {
+                    cell.timeout(now.wall);
+                }
+                for part in &mut gpu.partitions {
+                    part.gfx_clock.timeout(now.wall);
                 }
             }
         }
@@ -427,9 +609,14 @@ impl Reducer {
         let Some(gpu) = self.gpus.iter_mut().find(|g| g.disc.id == report.gpu) else {
             return;
         };
+        let stored = StoredHealthReport {
+            candidates: report.candidates,
+            observed_mono: report.observed_mono,
+            lane: report.lane,
+        };
         match report.origin {
-            Origin::Kernel => gpu.kernel_health = report.candidates,
-            Origin::AmdSmi => gpu.amdsmi_health = report.candidates,
+            Origin::Kernel => gpu.kernel_health = Some(stored),
+            Origin::AmdSmi => gpu.amdsmi_health = Some(stored),
         }
     }
 
@@ -588,9 +775,10 @@ impl Reducer {
 /// surfaces share one occupancy definition.
 fn occupancy(used: &Cell, total: &Cell) -> Observation<f64> {
     match (used.fresh_u64(), total.fresh_u64()) {
-        (Some((used, at)), Some((total, _))) if total > 0 => {
+        (Some((used, at)), Some((total, _))) if total > 0 && used <= total => {
             Observation::value(used as f64 / total as f64 * 100.0, at)
         }
+        (Some(_), Some(_)) => Observation::unavailable(ObservationState::SOURCE_ERROR),
         (None, _) => used.observation_f64(),
         (_, _) => total.observation_f64(),
     }
@@ -599,8 +787,14 @@ fn occupancy(used: &Cell, total: &Cell) -> Observation<f64> {
 /// Collects source-backed and derived candidates, then selects one sentence.
 fn assemble_health(gpu: &GpuState, now: Now) -> Health {
     let mut candidates: Vec<HealthCandidate> = Vec::new();
-    candidates.extend(gpu.kernel_health.iter().cloned());
-    candidates.extend(gpu.amdsmi_health.iter().cloned());
+    for report in [&gpu.kernel_health, &gpu.amdsmi_health]
+        .into_iter()
+        .flatten()
+    {
+        if report.active(now.mono) {
+            candidates.extend(report.candidates.iter().cloned());
+        }
+    }
 
     // Source-reported limits reached (both numbers source-reported).
     if let (Some((hotspot, at)), Some((limit, _))) =
@@ -625,34 +819,40 @@ fn assemble_health(gpu: &GpuState, now: Now) -> Health {
         });
     }
 
-    // Telemetry trouble from contracted mode observations only.
-    let mut contracted: Vec<&Cell> = vec![&gpu.hotspot, &gpu.power];
+    // Telemetry trouble from every contracted mode observation. The memory
+    // controller is optional; primary-partition ownership is structural.
+    let mut contracted: Vec<&Cell> =
+        vec![&gpu.hotspot, &gpu.temp_limit, &gpu.power, &gpu.power_cap];
     for part in &gpu.partitions {
         contracted.push(&part.activity);
         contracted.push(&part.mem_used);
         contracted.push(&part.mem_total);
+        contracted.push(&part.gfx_clock);
     }
+    let normal_observed_at = contracted
+        .iter()
+        .filter_map(|cell| cell.health_time())
+        .max()
+        .unwrap_or(now.wall);
     for cell in contracted {
-        let Some((state, last_good)) = cell.trouble() else {
+        let Some((state, source_time)) = cell.trouble() else {
             continue;
         };
-        let (message, observed_at) = match state.as_str() {
-            "asleep" => ("GPU asleep".to_owned(), now.wall),
-            "permission_denied" => ("telemetry permission denied".to_owned(), now.wall),
-            "unsupported_driver_version" => (
-                "telemetry unsupported by this driver version".to_owned(),
-                now.wall,
-            ),
+        let observed_at = source_time.unwrap_or(now.wall);
+        let message = match state.as_str() {
+            "asleep" => "GPU asleep".to_owned(),
+            "permission_denied" => "telemetry permission denied".to_owned(),
+            "unsupported_hardware" => "telemetry unsupported by hardware".to_owned(),
+            "unsupported_driver_version" => {
+                "telemetry unsupported by this driver version".to_owned()
+            }
             "stale" => {
-                let age = last_good
+                let age = source_time
                     .map(|t| (now.wall.as_odt() - t.as_odt()).as_seconds_f64().max(0.0))
                     .unwrap_or(0.0);
-                (
-                    format!("telemetry stale · last sample {age:.1}s ago"),
-                    now.wall,
-                )
+                format!("telemetry stale · last sample {age:.1}s ago")
             }
-            _ => ("telemetry source error".to_owned(), now.wall),
+            _ => "telemetry source error".to_owned(),
         };
         if !candidates
             .iter()
@@ -666,7 +866,7 @@ fn assemble_health(gpu: &GpuState, now: Now) -> Health {
         }
     }
 
-    health::select(&candidates, now.wall)
+    health::select(&candidates, normal_observed_at)
 }
 
 #[cfg(test)]
@@ -802,22 +1002,18 @@ mod tests {
             vec![activity(80.0)],
         ));
         r.end_tick(clock.at(0));
-        // No further results at all; past max(1s, 3×250ms) = 1s.
-        let snapshot = r.assemble(clock.at(1500), None);
+        // No further results; at max(1s, 3×250ms) the value is stale.
+        let snapshot = r.assemble(clock.at(1000), None);
         assert_eq!(
             snapshot_activity(&snapshot),
             &Observation::stale(clock.at(0).wall)
         );
-        // Health names the stale telemetry with its age.
+        // Other never-observed contracted cells also keep health in telemetry.
         assert_eq!(snapshot.gpus[0].health.category, HealthCategory::TELEMETRY);
-        assert_eq!(
-            snapshot.gpus[0].health.message,
-            "telemetry stale · last sample 1.5s ago"
-        );
     }
 
     #[test]
-    fn deadline_elapsed_with_asleep_evidence_shows_asleep() {
+    fn deadline_elapsed_with_asleep_evidence_is_stale_with_last_good_time() {
         let clock = Clock::new();
         let mut r = reducer(&clock);
         r.apply_batch(fast_batch(
@@ -833,9 +1029,8 @@ mod tests {
         let snapshot = r.assemble(clock.at(1500), None);
         assert_eq!(
             snapshot_activity(&snapshot),
-            &Observation::unavailable(ObservationState::ASLEEP)
+            &Observation::stale(clock.at(0).wall)
         );
-        assert_eq!(snapshot.gpus[0].health.message, "GPU asleep");
     }
 
     #[test]
@@ -956,8 +1151,6 @@ mod tests {
             snapshot.gpus[0].partitions[1].activity_percent,
             Observation::unavailable(ObservationState::REPORTED_BY_PRIMARY_PARTITION)
         );
-        // Structural scope ownership is not telemetry trouble.
-        assert_ne!(snapshot.gpus[0].health.message, "telemetry source error");
     }
 
     #[test]
@@ -996,6 +1189,8 @@ mod tests {
         r.apply_health_report(SourceHealthReport {
             gpu: gpu_id(),
             origin: Origin::Kernel,
+            observed_mono: now.mono,
+            lane: Lane::Slow,
             candidates: vec![HealthCandidate {
                 category: HealthCategory::THROTTLE,
                 message: "thermal throttle · hotspot 94 / 95°C".to_owned(),
@@ -1009,6 +1204,8 @@ mod tests {
         r.apply_health_report(SourceHealthReport {
             gpu: gpu_id(),
             origin: Origin::Kernel,
+            observed_mono: now.mono,
+            lane: Lane::Slow,
             candidates: vec![
                 HealthCandidate {
                     category: HealthCategory::THROTTLE,
@@ -1114,6 +1311,171 @@ mod tests {
         assert_eq!(
             r.daily_record().gpus[gpu_id().as_str()].activity_peak_percent,
             Some(95.0)
+        );
+    }
+
+    #[test]
+    fn late_batch_never_enters_history_or_peaks() {
+        let clock = Clock::new();
+        let mut r = reducer(&clock);
+        r.apply_batch_at(
+            fast_batch(clock.at(0), Origin::Kernel, vec![activity(99.0)]),
+            Some(clock.at(1500).mono),
+        );
+        r.end_tick(clock.at(1500));
+        let snapshot = r.assemble(clock.at(1500), None);
+        assert!(
+            snapshot.gpus[0].partitions[0]
+                .activity_percent
+                .current()
+                .is_none()
+        );
+        let render = r.render_model(&snapshot, None);
+        assert_eq!(render.gpus[0].activity_history, vec![None]);
+        assert_eq!(render.gpus[0].session_peak_activity, None);
+    }
+
+    #[test]
+    fn optional_source_cannot_mask_kernel_runtime_state() {
+        let clock = Clock::new();
+        let mut r = reducer(&clock);
+        r.apply_batch(fast_batch(
+            clock.at(0),
+            Origin::Kernel,
+            vec![activity_err(ObservationState::UNSUPPORTED_HARDWARE)],
+        ));
+        r.apply_batch(fast_batch(
+            clock.at(10),
+            Origin::AmdSmi,
+            vec![activity(50.0)],
+        ));
+        r.apply_batch(fast_batch(
+            clock.at(15),
+            Origin::Kernel,
+            vec![activity_err(ObservationState::UNSUPPORTED_HARDWARE)],
+        ));
+        assert_eq!(
+            snapshot_activity(&r.assemble(clock.at(25), None)),
+            &Observation::value(50.0, clock.at(10).wall)
+        );
+        r.apply_batch(fast_batch(
+            clock.at(30),
+            Origin::Kernel,
+            vec![activity_err(ObservationState::ASLEEP)],
+        ));
+        r.apply_batch(fast_batch(
+            clock.at(40),
+            Origin::AmdSmi,
+            vec![activity_err(ObservationState::SOURCE_ERROR)],
+        ));
+        assert_eq!(
+            snapshot_activity(&r.assemble(clock.at(50), None)),
+            &Observation::unavailable(ObservationState::ASLEEP)
+        );
+    }
+
+    #[test]
+    fn stale_last_good_survives_repeated_failures() {
+        let clock = Clock::new();
+        let mut r = reducer(&clock);
+        r.apply_batch(fast_batch(
+            clock.at(0),
+            Origin::Kernel,
+            vec![activity(70.0)],
+        ));
+        let _ = r.assemble(clock.at(1000), None);
+        r.apply_batch(fast_batch(
+            clock.at(1250),
+            Origin::Kernel,
+            vec![activity_err(ObservationState::SOURCE_ERROR)],
+        ));
+        assert_eq!(
+            snapshot_activity(&r.assemble(clock.at(1300), None)),
+            &Observation::stale(clock.at(0).wall)
+        );
+    }
+
+    #[test]
+    fn same_ids_with_changed_primary_or_pool_are_fatal() {
+        let clock = Clock::new();
+        let mut r = reducer(&clock);
+        let mut changed = discovered(1);
+        changed.partitions[0].is_primary = false;
+        assert_eq!(
+            r.apply_topology(vec![changed]),
+            vec![StateEffect::PartitionConfigurationChanged(gpu_id())]
+        );
+
+        let mut r = reducer(&clock);
+        let mut changed = discovered(1);
+        changed.pool = MemoryPool::GTT;
+        assert_eq!(
+            r.apply_topology(vec![changed]),
+            vec![StateEffect::PartitionConfigurationChanged(gpu_id())]
+        );
+    }
+
+    #[test]
+    fn invalid_memory_relationship_never_updates_observations_or_history() {
+        let clock = Clock::new();
+        let mut r = reducer(&clock);
+        r.apply_batch(fast_batch(
+            clock.at(0),
+            Origin::Kernel,
+            vec![
+                MetricResult {
+                    metric: MetricKey::Partition(PartitionMetric::MemUsedBytes),
+                    outcome: Ok(Value::U64(200)),
+                },
+                MetricResult {
+                    metric: MetricKey::Partition(PartitionMetric::MemTotalBytes),
+                    outcome: Ok(Value::U64(100)),
+                },
+            ],
+        ));
+        r.end_tick(clock.at(0));
+        let snapshot = r.assemble(clock.at(0), None);
+        let memory = &snapshot.gpus[0].partitions[0].memory;
+        assert_eq!(
+            memory.used_bytes,
+            Observation::unavailable(ObservationState::SOURCE_ERROR)
+        );
+        assert_eq!(
+            memory.total_bytes,
+            Observation::unavailable(ObservationState::SOURCE_ERROR)
+        );
+        assert_eq!(
+            memory.occupancy_percent,
+            Observation::unavailable(ObservationState::SOURCE_ERROR)
+        );
+        assert_eq!(
+            r.render_model(&snapshot, None).gpus[0].memory_history,
+            vec![None]
+        );
+    }
+
+    #[test]
+    fn source_health_report_expires_on_its_cadence() {
+        let clock = Clock::new();
+        let mut r = reducer(&clock);
+        r.apply_health_report(SourceHealthReport {
+            gpu: gpu_id(),
+            origin: Origin::Kernel,
+            observed_mono: clock.at(0).mono,
+            lane: Lane::Slow,
+            candidates: vec![HealthCandidate {
+                category: HealthCategory::THROTTLE,
+                message: "thermal throttle".to_owned(),
+                observed_at: clock.at(0).wall,
+            }],
+        });
+        assert_eq!(
+            r.assemble(clock.at(100), None).gpus[0].health.category,
+            HealthCategory::THROTTLE
+        );
+        assert_ne!(
+            r.assemble(clock.at(3000), None).gpus[0].health.category,
+            HealthCategory::THROTTLE
         );
     }
 }
