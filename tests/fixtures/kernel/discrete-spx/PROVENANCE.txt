@@ -1,0 +1,5 @@
+Synthesized fixture for a CDNA2-class discrete SPX GPU.
+Text node names/units follow docs.kernel.org amdgpu thermal/driver-misc docs;
+gpu_metrics v1.3 blob synthesized against kgd_pp_interface.h (torvalds/linux
+2be02a7c996a) with the memset-0xFF sentinel convention. All identifiers are
+fabricated; no captured host data.

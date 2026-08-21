@@ -1,0 +1,2 @@
+Synthesized fixture for an APU emitting gpu_metrics v3.0, built against
+kgd_pp_interface.h explicit [0-100]%/mW/MHz unit comments. Fabricated data.

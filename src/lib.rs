@@ -9,8 +9,10 @@
 mod cli;
 mod config;
 mod model;
+mod normalize;
 mod output;
 mod persist;
+mod source;
 mod state;
 
 pub use model::{

@@ -1,0 +1,5 @@
+Synthesized fixture for a CDNA3-class GPU in a two-XCP partition mode.
+Shape reduced from the AMD SMI partitioning documentation: the primary
+partition owns the device-wide gpu_metrics (v1.6, synthesized against
+kgd_pp_interface.h) and per-engine sensors; the secondary partition
+exposes only its own memory accounting. Fabricated identifiers.

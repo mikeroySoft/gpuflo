@@ -1,0 +1,2 @@
+Synthesized boundary: unknown future gpu_metrics version (9.9) must map to
+unsupported_driver_version without guessing a struct.

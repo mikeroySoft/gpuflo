@@ -1,0 +1,3 @@
+Synthesized boundary: gpu_metrics v1.9 dynamic header. The v1.9 layout is
+pointer-based per kgd_pp_interface.h and must map to
+unsupported_driver_version, while text nodes keep reporting.

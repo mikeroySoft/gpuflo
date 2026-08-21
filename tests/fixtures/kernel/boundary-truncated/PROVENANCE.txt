@@ -1,0 +1,2 @@
+Synthesized boundary: recognized v1.3 header with a truncated payload must
+map to source_error (malformed), never a partially-read struct.

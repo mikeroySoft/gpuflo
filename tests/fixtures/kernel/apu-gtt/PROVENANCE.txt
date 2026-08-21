@@ -1,0 +1,4 @@
+Synthesized fixture for a Ryzen APU with a GTT pool larger than the VRAM
+carveout. gpu_metrics v2.4 blob synthesized against kgd_pp_interface.h
+(centi-Celsius / centi-percent / mW units per upstream comments). All
+identifiers are fabricated; no captured host data.

@@ -1,0 +1,2 @@
+Synthesized boundary: malformed text scalars must map to source_error,
+never a clamped or invented number.

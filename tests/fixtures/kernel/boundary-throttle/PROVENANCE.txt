@@ -1,0 +1,3 @@
+Synthesized boundary: v1.3 throttle_status with thermal+power
+indep_throttle_status bits (SMU_THROTTLER ranges per amdgpu_smu.h), RAS
+uncorrectable counts, and pending/unreservable bad pages.
