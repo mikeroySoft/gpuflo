@@ -13,8 +13,11 @@ mod monitor;
 mod normalize;
 mod output;
 mod persist;
+mod run;
 mod source;
 mod state;
+mod terminal;
+mod ui;
 
 pub use model::{
     Health, HealthCategory, InvalidPciBdf, Memory, MemoryPool, Observation, ObservationState,
@@ -25,3 +28,10 @@ pub use monitor::{
     Monitor, MonitorClosed, MonitorCommand, MonitorError, MonitorEvent, MonitorOptions, Notice,
     ReceiveTimeoutError, ShutdownError, StartError,
 };
+
+/// Binary glue entrypoint: runs gruflo from process arguments and
+/// environment, returning the exit code. Public only for `src/main.rs`;
+/// excluded from the supported reuse interface.
+pub fn run_from_env() -> u8 {
+    run::run_from_env()
+}

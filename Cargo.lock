@@ -455,6 +455,7 @@ dependencies = [
  "crossbeam-channel",
  "crossterm",
  "lexopt",
+ "libc",
  "libloading",
  "ratatui",
  "serde",

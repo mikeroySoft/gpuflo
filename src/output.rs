@@ -15,7 +15,7 @@ use crate::model::{
 /// Writes one pretty JSON snapshot followed by a single trailing newline.
 ///
 /// `--json` snapshots carry no `sequence`; the caller passes it as `None`.
-pub(crate) fn write_json(out: &mut impl Write, snapshot: &Snapshot) -> io::Result<()> {
+pub(crate) fn write_json(out: &mut (impl Write + ?Sized), snapshot: &Snapshot) -> io::Result<()> {
     debug_assert!(
         snapshot.sequence.is_none(),
         "--json snapshots must not carry a sequence"
@@ -27,7 +27,10 @@ pub(crate) fn write_json(out: &mut impl Write, snapshot: &Snapshot) -> io::Resul
 /// Writes one compact NDJSON snapshot line and flushes it.
 ///
 /// `--json-stream` records carry `sequence`; the caller sets it.
-pub(crate) fn write_ndjson_line(out: &mut impl Write, snapshot: &Snapshot) -> io::Result<()> {
+pub(crate) fn write_ndjson_line(
+    out: &mut (impl Write + ?Sized),
+    snapshot: &Snapshot,
+) -> io::Result<()> {
     serde_json::to_writer(&mut *out, snapshot)?;
     out.write_all(b"\n")?;
     out.flush()
@@ -37,7 +40,7 @@ pub(crate) fn write_ndjson_line(out: &mut impl Write, snapshot: &Snapshot) -> io
 /// order: identity, primary-XCP label (multi-partition only), activity,
 /// memory, hotspot, power, clock, health sentence.
 pub(crate) fn write_once_line(
-    out: &mut impl Write,
+    out: &mut (impl Write + ?Sized),
     gpu: &PhysicalGpu,
     sampled_at: Timestamp,
 ) -> io::Result<()> {
@@ -57,7 +60,7 @@ pub(crate) fn write_once_line(
 /// Writes one `--tiny` status line: identity, activity, memory, hotspot,
 /// health sentence. No power or clock.
 pub(crate) fn write_tiny_line(
-    out: &mut impl Write,
+    out: &mut (impl Write + ?Sized),
     gpu: &PhysicalGpu,
     sampled_at: Timestamp,
 ) -> io::Result<()> {
@@ -79,12 +82,12 @@ fn primary_partition(gpu: &PhysicalGpu) -> &crate::model::Partition {
         .expect("a physical GPU always owns at least one partition")
 }
 
-fn write_identity(out: &mut impl Write, gpu: &PhysicalGpu) -> io::Result<()> {
+fn write_identity(out: &mut (impl Write + ?Sized), gpu: &PhysicalGpu) -> io::Result<()> {
     write!(out, "gpu {} {} [{}]", gpu.index, gpu.name, gpu.bdf)
 }
 
 fn write_activity(
-    out: &mut impl Write,
+    out: &mut (impl Write + ?Sized),
     activity: &Observation<f64>,
     sampled_at: Timestamp,
 ) -> io::Result<()> {
@@ -97,7 +100,11 @@ fn write_activity(
     }
 }
 
-fn write_memory(out: &mut impl Write, memory: &Memory, sampled_at: Timestamp) -> io::Result<()> {
+fn write_memory(
+    out: &mut (impl Write + ?Sized),
+    memory: &Memory,
+    sampled_at: Timestamp,
+) -> io::Result<()> {
     write!(out, " | memory ")?;
     let label = pool_label(memory.pool.as_str());
     match (&memory.used_bytes, &memory.total_bytes) {
@@ -121,7 +128,7 @@ fn write_memory(out: &mut impl Write, memory: &Memory, sampled_at: Timestamp) ->
 }
 
 fn write_hotspot(
-    out: &mut impl Write,
+    out: &mut (impl Write + ?Sized),
     temperature: &Temperature,
     sampled_at: Timestamp,
 ) -> io::Result<()> {
@@ -137,7 +144,11 @@ fn write_hotspot(
     }
 }
 
-fn write_power(out: &mut impl Write, power: &Power, sampled_at: Timestamp) -> io::Result<()> {
+fn write_power(
+    out: &mut (impl Write + ?Sized),
+    power: &Power,
+    sampled_at: Timestamp,
+) -> io::Result<()> {
     write!(out, " | power ")?;
     match &power.socket_watts {
         Observation::Value { value, .. } => match &power.cap_watts {
@@ -151,7 +162,7 @@ fn write_power(out: &mut impl Write, power: &Power, sampled_at: Timestamp) -> io
 }
 
 fn write_clock(
-    out: &mut impl Write,
+    out: &mut (impl Write + ?Sized),
     clock: &Observation<f64>,
     sampled_at: Timestamp,
 ) -> io::Result<()> {
@@ -168,7 +179,7 @@ fn write_clock(
 /// observation renders its age against snapshot assembly time as
 /// whole-plus-tenths seconds, e.g. `stale 4.2s`.
 fn write_unavailable(
-    out: &mut impl Write,
+    out: &mut (impl Write + ?Sized),
     state: &ObservationState,
     observed_at: Option<Timestamp>,
     sampled_at: Timestamp,

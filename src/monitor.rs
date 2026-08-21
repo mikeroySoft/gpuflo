@@ -666,17 +666,34 @@ impl Coordinator {
                 }
             }
 
-            // 5. Sleep until the earliest deadline or an incoming directive.
+            // 5. Sleep until the earliest deadline, an incoming directive,
+            //    or any lane result becoming ready. Results wake the loop so
+            //    slow/fast samples are applied promptly, never a tick late.
             let deadline = [next_fast, next_slow, next_production, next_rediscovery]
                 .into_iter()
                 .min()
                 .expect("nonempty");
-            let wait = deadline.saturating_duration_since(Instant::now());
-            match self.directives.recv_timeout(wait.min(FAST_CADENCE)) {
-                Ok(Directive::Command(command)) => self.handle_command(command),
-                Ok(Directive::Shutdown) => break 'main,
-                Err(crossbeam_channel::RecvTimeoutError::Timeout) => {}
-                Err(crossbeam_channel::RecvTimeoutError::Disconnected) => break 'main,
+            let wait = deadline
+                .saturating_duration_since(Instant::now())
+                .min(FAST_CADENCE);
+            let mut select = crossbeam_channel::Select::new();
+            let directive_index = select.recv(&self.directives);
+            for lane in self.kernel_lanes.values() {
+                select.recv(&lane.result);
+            }
+            select.recv(&self.amdsmi.result);
+            select.recv(&self.process.result);
+            select.recv(&self.discovery.result);
+            match select.ready_timeout(wait) {
+                Ok(index) if index == directive_index => match self.directives.try_recv() {
+                    Ok(Directive::Command(command)) => self.handle_command(command),
+                    Ok(Directive::Shutdown) => break 'main,
+                    Err(crossbeam_channel::TryRecvError::Empty) => {}
+                    Err(crossbeam_channel::TryRecvError::Disconnected) => break 'main,
+                },
+                // A lane result is ready; the next pass drains it.
+                Ok(_) => {}
+                Err(_) => {}
             }
         }
 

@@ -26,3 +26,6 @@ toml = "0.9.8"
 [profile.release]
 lto = true
 codegen-units = 1
+
+[dev-dependencies]
+libc = "0.2.189"
