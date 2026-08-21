@@ -65,6 +65,7 @@ Neither text mode emits ANSI escapes, even when stdout is a terminal. An unavail
 - `asleep`
 - `reported by primary partition`
 - `stale <age>`
+- `source error`
 
 Memory uses IEC human formatting while retaining its actual pool label. Percent, Celsius, watts, and megahertz retain the mode's existing display semantics.
 
@@ -118,6 +119,7 @@ The canonical version-1 states are:
 - `asleep`
 - `reported_by_primary_partition`
 - `stale`
+- `source_error`
 
 A stale observation contains the time of the last good observation but no numeric value:
 
@@ -291,7 +293,7 @@ A fatal stream failure does not inject an error object into stdout. Successfully
 Compatible version-1 evolution may:
 
 - add optional fields;
-- add new capability-state, health-category, memory-pool, or topology strings; and
+- add new observation-state, health-category, memory-pool, or topology strings; and
 - populate previously absent optional identity fields.
 
 Consumers must ignore unknown fields and handle unknown strings generically without treating them as numeric zero or normal health.
@@ -300,7 +302,7 @@ A removal, rename, type change, scope change, unit change, or meaning change req
 
 ## Errors and exit behavior
 
-Unavailable or stale observations are data, not command failures. A snapshot containing partial telemetry exits successfully as long as gruflo discovered at least one physical GPU and produced the contracted output.
+Unavailable or stale observations are data, not command failures. A snapshot containing partial telemetry exits successfully as long as gruflo discovered at least one physical GPU at startup and produced the contracted output. If every GPU later disappears, a running JSON stream remains successful, emits snapshots with `gpus: []`, and continues discovery.
 
 Non-interactive modes use these exits:
 
@@ -312,6 +314,8 @@ Non-interactive modes use these exits:
 | `130` | Interrupted by SIGINT. |
 
 Fatal diagnostics go to stderr. JSON stdout contains snapshots only. A broken pipe is silent and exits `0`, so `gruflo --json-stream | head` behaves as a successful Unix pipeline.
+
+The companion [capability, failure, and permission design](./2026-08-20-gruflo-capability-failure-design.md) defines how source failures map to observation states and when a runtime topology change requires restart.
 
 ## Explicit non-goals
 

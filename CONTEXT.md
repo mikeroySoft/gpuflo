@@ -1,8 +1,8 @@
 # Gruflo Domain Glossary
 
-## Capability state
+## Observation state
 
-The reason an observation has no current numeric value. Canonical states are `unsupported_hardware`, `unsupported_driver_version`, `permission_denied`, `asleep`, `reported_by_primary_partition`, and `stale`.
+The reason an observation has no current numeric value. Canonical states are `unsupported_hardware`, `unsupported_driver_version`, `permission_denied`, `asleep`, `reported_by_primary_partition`, `stale`, and `source_error`.
 
 ## Detail view
 
@@ -30,7 +30,7 @@ An allocation-pressure or allocation-failure condition explicitly reported by a 
 
 ## Observation
 
-A metric at one hardware scope, represented either by a numeric value with its source observation time or by a capability state. A stale observation retains the last good observation time but not its numeric value.
+A metric at one hardware scope, represented either by a numeric value with its source observation time or by an observation state. A stale observation retains the last good observation time but not its numeric value.
 
 ## Physical GPU
 
@@ -47,6 +47,14 @@ The secondary surface for honestly attributable process identity, GPU associatio
 ## Snapshot
 
 One exportable view of every discovered physical GPU at a stated assembly time. Its observations retain their own source times and may therefore come from different collection cadences.
+
+## Structural capability
+
+Whether the current hardware, driver interface, and topology can report a metric at all. It is distinct from a temporary runtime failure of an otherwise supported source.
+
+## Supported host
+
+A Linux host with at least one AMD PCI/DRM device bound to the `amdgpu` driver. ROCm userspace, AMD SMI, `/dev/kfd`, supplemental groups, and root privileges are not part of this minimum.
 
 ## XCP
 

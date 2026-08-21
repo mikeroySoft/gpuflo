@@ -97,7 +97,7 @@ XCPs appear beneath their physical socket rather than as independent physical GP
 
 There is no aggregate node-utilization percentage: averaging or summing unlike devices would be ambiguous.
 
-## Capability and freshness states
+## Observation and freshness states
 
 Every observation is either a value or one of these explicit states:
 
@@ -107,8 +107,9 @@ Every observation is either a value or one of these explicit states:
 - `asleep`
 - `reported_by_primary_partition`
 - `stale`
+- `source_error`
 
-A source sentinel, absent sysfs node, permission error, runtime-suspended read, partition ownership rule, and expired observation map to different states. None maps to numeric zero.
+A source sentinel, absent sysfs node, permission error, runtime-suspended read, partition ownership rule, expired observation, and recognized-source failure map to distinct states. None maps to numeric zero.
 
 The UI may use a compact dash or marker, but detail/help text must expose the exact state.
 
@@ -168,6 +169,8 @@ The contract is satisfied when:
 - all responsive TUI and machine-readable modes use the same metric meanings.
 
 The companion [machine-readable output design](./2026-08-20-gruflo-machine-readable-output-design.md) fixes the text, JSON, stream, tiny, topology, state, unit, timestamp, versioning, and exit contracts for those meanings.
+
+The companion [capability, failure, and permission design](./2026-08-20-gruflo-capability-failure-design.md) fixes startup, probing, recovery, hotplug, malformed-source, partial-failure, and terminal-restoration behavior.
 
 ## Evidence
 
