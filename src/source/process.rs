@@ -429,10 +429,24 @@ fn fdinfo_reading(kib: Option<u64>, proc_dir: &Path) -> Reading<u64> {
     }
 }
 
-/// `KiB`-suffixed fdinfo quantity.
+/// fdinfo memory normalized to KiB. Current kernels may select KiB/MiB/GiB
+/// per value; unsuffixed zero remains valid.
 fn parse_kib(value: &str) -> Result<u64, ()> {
-    let number = value.strip_suffix("KiB").unwrap_or(value).trim();
-    number.parse::<u64>().map_err(|_| ())
+    let value = value.trim();
+    let (number, factor) = if let Some(number) = value.strip_suffix("KiB") {
+        (number.trim(), 1)
+    } else if let Some(number) = value.strip_suffix("MiB") {
+        (number.trim(), 1024)
+    } else if let Some(number) = value.strip_suffix("GiB") {
+        (number.trim(), 1024 * 1024)
+    } else {
+        (value, 1)
+    };
+    number
+        .parse::<u64>()
+        .ok()
+        .and_then(|number| number.checked_mul(factor))
+        .ok_or(())
 }
 
 /// Permitted process name from `comm`; never the command line. Control
@@ -608,6 +622,14 @@ mod tests {
         );
     }
 
+    #[test]
+    fn fdinfo_memory_units_normalize_to_kib() {
+        assert_eq!(parse_kib("26640 KiB"), Ok(26_640));
+        assert_eq!(parse_kib("2 MiB"), Ok(2_048));
+        assert_eq!(parse_kib("1 GiB"), Ok(1024 * 1024));
+        assert_eq!(parse_kib("0"), Ok(0));
+        assert!(parse_kib("2 MB").is_err());
+    }
     #[test]
     fn process_names_are_sanitized_before_rendering() {
         let dir = std::env::temp_dir().join(format!("gruflo-process-name-{}", std::process::id()));

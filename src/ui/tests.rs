@@ -545,7 +545,10 @@ fn process_overlay_lists_honest_attribution() {
         "resolved physical/XCP association missing"
     );
     assert!(text.contains("1.5 GiB"), "fdinfo VRAM missing");
-    assert!(text.contains("KFD 1.0 GiB"), "labelled KFD memory missing");
+    assert!(
+        text.contains("KFD") && text.contains("1.0 GiB"),
+        "KFD memory missing"
+    );
     assert!(text.contains("unknown"), "unresolved association missing");
     assert!(
         text.contains("permission denied"),

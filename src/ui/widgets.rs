@@ -812,7 +812,7 @@ fn process_line(row: &ProcessRow, overlay: &ProcessOverlay, model: &RenderModel)
         .unwrap_or_else(|| "unknown".to_owned());
     let vram = memory_cell(&row.fdinfo_vram_bytes);
     let gtt = memory_cell(&row.fdinfo_gtt_bytes);
-    let kfd = format!("KFD {}", memory_cell(&row.kfd_vram_bytes));
+    let kfd = memory_cell(&row.kfd_vram_bytes);
     let container = row
         .container
         .as_deref()
