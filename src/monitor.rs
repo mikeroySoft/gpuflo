@@ -287,6 +287,7 @@ struct SummaryLoadLane {
     result: Receiver<Result<Option<crate::state::history::DailySummaryRecord>, String>>,
     join: Option<std::thread::JoinHandle<()>>,
     deadline: Instant,
+    timed_out_notified: bool,
 }
 
 fn spawn_summary_load(path: Option<PathBuf>) -> (Option<SummaryLoadLane>, Option<String>) {
@@ -304,6 +305,7 @@ fn spawn_summary_load(path: Option<PathBuf>) -> (Option<SummaryLoadLane>, Option
                 result: receiver,
                 join: Some(join),
                 deadline: Instant::now() + Duration::from_millis(100),
+                timed_out_notified: false,
             }),
             None,
         ),
@@ -481,15 +483,33 @@ struct InFlight {
     timed_out: bool,
 }
 
-fn accept_result(in_flight: &mut Option<InFlight>, generation: u64, now: Instant) -> bool {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ResultDisposition {
+    Accepted,
+    ExpiredNeedsTimeout,
+    ExpiredHandled,
+    Mismatched,
+}
+
+fn classify_result(
+    in_flight: &mut Option<InFlight>,
+    generation: u64,
+    now: Instant,
+) -> ResultDisposition {
     let Some(current) = in_flight.take() else {
-        return false;
+        return ResultDisposition::Mismatched;
     };
     if current.generation != generation {
         *in_flight = Some(current);
-        return false;
+        return ResultDisposition::Mismatched;
     }
-    !current.timed_out && now < current.deadline
+    if current.timed_out {
+        ResultDisposition::ExpiredHandled
+    } else if now >= current.deadline {
+        ResultDisposition::ExpiredNeedsTimeout
+    } else {
+        ResultDisposition::Accepted
+    }
 }
 
 struct KernelLane {
@@ -1093,12 +1113,14 @@ impl Coordinator {
                 finished = true;
                 join_ready = true;
             }
-            Err(crossbeam_channel::TryRecvError::Empty) if now >= load.deadline => {
+            Err(crossbeam_channel::TryRecvError::Empty)
+                if now >= load.deadline && !load.timed_out_notified =>
+            {
                 self.shared.publish_notice(Notice {
                     message: "daily summary load timed out".to_owned(),
                     occurred_at: Timestamp::now(),
                 });
-                finished = true;
+                load.timed_out_notified = true;
             }
             Err(crossbeam_channel::TryRecvError::Empty) => {}
         }
@@ -1206,15 +1228,29 @@ impl Coordinator {
                 let Ok(result) = lane.result.try_recv() else {
                     break;
                 };
-                let matched = lane
-                    .in_flight
-                    .as_ref()
-                    .is_some_and(|current| current.generation == result.generation);
-                let accepted = accept_result(&mut lane.in_flight, result.generation, now);
-                if matched {
-                    lane.current_job = None;
+                let disposition = classify_result(&mut lane.in_flight, result.generation, now);
+                let job = if disposition != ResultDisposition::Mismatched {
+                    lane.current_job.take()
+                } else {
+                    None
+                };
+                if disposition == ResultDisposition::ExpiredNeedsTimeout {
+                    if let Some(job) = job {
+                        self.reducer.apply_kernel_timeout(
+                            &gpu_id,
+                            match job {
+                                KernelJob::Fast => Lane::Fast,
+                                KernelJob::Slow => Lane::Slow,
+                            },
+                            Now {
+                                wall: Timestamp::now(),
+                                mono: now,
+                            },
+                        );
+                    }
+                    continue;
                 }
-                if !accepted {
+                if disposition != ResultDisposition::Accepted {
                     continue;
                 }
                 match result.value {
@@ -1246,7 +1282,8 @@ impl Coordinator {
             }
         }
         if let Ok(result) = self.amdsmi.result.try_recv()
-            && accept_result(&mut self.amdsmi.in_flight, result.generation, now)
+            && classify_result(&mut self.amdsmi.in_flight, result.generation, now)
+                == ResultDisposition::Accepted
         {
             for batch in normalize::amdsmi(result.value, &self.partition_by_bdf, &self.gpu_pools) {
                 self.reducer.apply_batch_at(batch, Some(now));
@@ -1256,7 +1293,8 @@ impl Coordinator {
             }
         }
         if let Ok(result) = self.process.result.try_recv()
-            && accept_result(&mut self.process.in_flight, result.generation, now)
+            && classify_result(&mut self.process.in_flight, result.generation, now)
+                == ResultDisposition::Accepted
         {
             let sample = result.value;
             self.latest_processes = Some(ProcessOverlay {
@@ -1273,7 +1311,8 @@ impl Coordinator {
             });
         }
         if let Ok(result) = self.discovery.result.try_recv()
-            && accept_result(&mut self.discovery.in_flight, result.generation, now)
+            && classify_result(&mut self.discovery.in_flight, result.generation, now)
+                == ResultDisposition::Accepted
         {
             match result.value {
                 Ok(devices) => {
@@ -1442,7 +1481,7 @@ impl Coordinator {
 mod tests {
     use std::time::{Duration, Instant};
 
-    use super::{InFlight, accept_result};
+    use super::{InFlight, ResultDisposition, classify_result};
 
     #[test]
     fn priming_is_schedule_based_not_an_all_device_barrier() {
@@ -1462,21 +1501,36 @@ mod tests {
             deadline: now,
             timed_out: true,
         });
-        assert!(!accept_result(
-            &mut timed_out,
-            7,
-            now + Duration::from_millis(1)
-        ));
+        assert_eq!(
+            classify_result(&mut timed_out, 7, now + Duration::from_millis(1)),
+            ResultDisposition::ExpiredHandled
+        );
         assert!(timed_out.is_none());
+
+        let mut crossed = Some(InFlight {
+            generation: 8,
+            deadline: now,
+            timed_out: false,
+        });
+        assert_eq!(
+            classify_result(&mut crossed, 8, now + Duration::from_millis(1)),
+            ResultDisposition::ExpiredNeedsTimeout
+        );
 
         let mut current = Some(InFlight {
             generation: 9,
             deadline: now + Duration::from_secs(1),
             timed_out: false,
         });
-        assert!(!accept_result(&mut current, 8, now));
+        assert_eq!(
+            classify_result(&mut current, 8, now),
+            ResultDisposition::Mismatched
+        );
         assert_eq!(current.as_ref().unwrap().generation, 9);
-        assert!(accept_result(&mut current, 9, now));
+        assert_eq!(
+            classify_result(&mut current, 9, now),
+            ResultDisposition::Accepted
+        );
         assert!(current.is_none());
     }
 }

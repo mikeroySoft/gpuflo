@@ -319,47 +319,81 @@ fn indep_reasons(indep: u64) -> Vec<&'static str> {
 const KFD_HEAP_FB_PRIVATE: u64 = 1;
 const KFD_HEAP_FB_PUBLIC: u64 = 2;
 
-/// Maps PCI BDFs to their KFD framebuffer heap type, when the world-readable
-/// KFD topology is present. `heap_type 2` (FB_PUBLIC) identifies an APU;
-/// `heap_type 1` (FB_PRIVATE) identifies dedicated discrete VRAM.
+/// Maps BDFs only when the complete KFD scan contains exactly one explicit
+/// framebuffer heap item and no iterator/read ambiguity for that BDF.
 fn kfd_heap_types(root: &Path) -> HashMap<PciBdf, u64> {
-    let mut evidence: HashMap<PciBdf, Vec<u64>> = HashMap::new();
     let nodes = root.join("sys/class/kfd/kfd/topology/nodes");
-    let Ok(entries) = std::fs::read_dir(&nodes) else {
-        return HashMap::new();
+    let entries = match std::fs::read_dir(&nodes) {
+        Ok(entries) => entries,
+        Err(_) => return HashMap::new(),
     };
-    for entry in entries.flatten() {
+    let mut evidence: HashMap<PciBdf, (Vec<u64>, bool)> = HashMap::new();
+    let mut global_incomplete = false;
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(_) => {
+                global_incomplete = true;
+                continue;
+            }
+        };
         let dir = entry.path();
-        let Ok(properties) = std::fs::read_to_string(dir.join("properties")) else {
-            continue;
+        let properties = match std::fs::read_to_string(dir.join("properties")) {
+            Ok(properties) => properties,
+            Err(_) => {
+                global_incomplete = true;
+                continue;
+            }
         };
         let mut domain = 0u64;
         let mut location = None;
+        let mut simd_count = None;
         for line in properties.lines() {
             let mut parts = line.split_whitespace();
             match (parts.next(), parts.next()) {
                 (Some("domain"), Some(value)) => domain = value.parse().unwrap_or(0),
                 (Some("location_id"), Some(value)) => location = value.parse::<u64>().ok(),
+                (Some("simd_count"), Some(value)) => simd_count = value.parse::<u64>().ok(),
                 _ => {}
             }
         }
-        let Some(location) = location else { continue };
+        if simd_count == Some(0) {
+            continue;
+        }
+        let Some(location) = location else {
+            global_incomplete = true;
+            continue;
+        };
         let bus = (location >> 8) & 0xFF;
         let device = (location >> 3) & 0x1F;
         let function = location & 0x7;
         let Ok(bdf) = PciBdf::parse(&format!("{domain:04x}:{bus:02x}:{device:02x}.{function:x}"))
         else {
+            global_incomplete = true;
             continue;
         };
-        let Ok(banks) = std::fs::read_dir(dir.join("mem_banks")) else {
-            continue;
-        };
-        let mut framebuffer = None;
-        let mut ambiguous = false;
-        for bank in banks.flatten() {
-            let Ok(bank_properties) = std::fs::read_to_string(bank.path().join("properties"))
-            else {
+        let record = evidence.entry(bdf).or_insert_with(|| (Vec::new(), false));
+        let banks = match std::fs::read_dir(dir.join("mem_banks")) {
+            Ok(banks) => banks,
+            Err(_) => {
+                record.1 = true;
                 continue;
+            }
+        };
+        for bank in banks {
+            let bank = match bank {
+                Ok(bank) => bank,
+                Err(_) => {
+                    record.1 = true;
+                    continue;
+                }
+            };
+            let bank_properties = match std::fs::read_to_string(bank.path().join("properties")) {
+                Ok(properties) => properties,
+                Err(_) => {
+                    record.1 = true;
+                    continue;
+                }
             };
             for line in bank_properties.lines() {
                 let mut parts = line.split_whitespace();
@@ -367,20 +401,19 @@ fn kfd_heap_types(root: &Path) -> HashMap<PciBdf, u64> {
                     && let Ok(heap @ (KFD_HEAP_FB_PRIVATE | KFD_HEAP_FB_PUBLIC)) =
                         value.parse::<u64>()
                 {
-                    match framebuffer {
-                        None => framebuffer = Some(heap),
-                        Some(_) => ambiguous = true,
-                    }
+                    record.0.push(heap);
                 }
             }
         }
-        if !ambiguous && let Some(heap) = framebuffer {
-            evidence.entry(bdf).or_default().push(heap);
-        }
+    }
+    if global_incomplete {
+        return HashMap::new();
     }
     evidence
         .into_iter()
-        .filter_map(|(bdf, heaps)| (heaps.len() == 1).then(|| (bdf, heaps[0])))
+        .filter_map(|(bdf, (heaps, incomplete))| {
+            (!incomplete && heaps.len() == 1).then(|| (bdf, heaps[0]))
+        })
         .collect()
 }
 

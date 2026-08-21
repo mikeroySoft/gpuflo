@@ -273,7 +273,20 @@ impl Cell {
     }
 
     fn timeout(&mut self, wall: Timestamp) {
-        self.record_failure(ObservationState::SOURCE_ERROR, wall, Origin::Kernel);
+        self.last_attempt_wall = Some(wall);
+        match self.state {
+            CellState::Empty => {
+                self.state = CellState::Unavailable {
+                    state: ObservationState::SOURCE_ERROR,
+                    last_good: None,
+                    origin: Origin::Kernel,
+                };
+                self.last_failure = None;
+            }
+            _ => {
+                self.last_failure = Some((ObservationState::SOURCE_ERROR, wall));
+            }
+        }
     }
 
     fn health_time(&self) -> Option<Timestamp> {
@@ -1454,6 +1467,71 @@ mod tests {
         );
     }
 
+    #[test]
+    fn timeout_preserves_existing_explicit_or_fresh_state() {
+        let clock = Clock::new();
+        let mut r = reducer(&clock);
+        r.apply_batch(fast_batch(
+            clock.at(0),
+            Origin::Kernel,
+            vec![activity_err(ObservationState::UNSUPPORTED_HARDWARE)],
+        ));
+        r.apply_kernel_timeout(&gpu_id(), Lane::Fast, clock.at(200));
+        assert_eq!(
+            snapshot_activity(&r.assemble(clock.at(200), None)),
+            &Observation::unavailable(ObservationState::UNSUPPORTED_HARDWARE)
+        );
+
+        r.apply_batch(fast_batch(
+            clock.at(250),
+            Origin::AmdSmi,
+            vec![activity(60.0)],
+        ));
+        r.apply_kernel_timeout(&gpu_id(), Lane::Fast, clock.at(450));
+        assert_eq!(
+            snapshot_activity(&r.assemble(clock.at(450), None)),
+            &Observation::value(60.0, clock.at(250).wall)
+        );
+    }
+
+    #[test]
+    fn incomplete_invalid_memory_batch_does_not_partially_commit() {
+        let clock = Clock::new();
+        let mut r = reducer(&clock);
+        r.apply_batch(fast_batch(
+            clock.at(0),
+            Origin::Kernel,
+            vec![
+                MetricResult {
+                    metric: MetricKey::Partition(PartitionMetric::MemUsedBytes),
+                    outcome: Ok(Value::U64(50)),
+                },
+                MetricResult {
+                    metric: MetricKey::Partition(PartitionMetric::MemTotalBytes),
+                    outcome: Ok(Value::U64(100)),
+                },
+            ],
+        ));
+        r.apply_batch(fast_batch(
+            clock.at(250),
+            Origin::Kernel,
+            vec![
+                MetricResult {
+                    metric: MetricKey::Partition(PartitionMetric::MemUsedBytes),
+                    outcome: Ok(Value::U64(150)),
+                },
+                MetricResult {
+                    metric: MetricKey::Partition(PartitionMetric::MemTotalBytes),
+                    outcome: Err(ObservationState::SOURCE_ERROR),
+                },
+            ],
+        ));
+        let snapshot = r.assemble(clock.at(300), None);
+        let memory = &snapshot.gpus[0].partitions[0].memory;
+        assert_eq!(memory.used_bytes.current(), Some(&50));
+        assert_eq!(memory.total_bytes.current(), Some(&100));
+        assert_eq!(memory.occupancy_percent.current(), Some(&50.0));
+    }
     #[test]
     fn source_health_report_expires_on_its_cadence() {
         let clock = Clock::new();

@@ -163,7 +163,14 @@ impl ProcessSource {
         let mut fdinfo_statuses = Vec::new();
         match std::fs::read_dir(self.root.join("proc")) {
             Ok(entries) => {
-                for entry in entries.flatten() {
+                for entry in entries {
+                    let entry = match entry {
+                        Ok(entry) => entry,
+                        Err(_) => {
+                            fdinfo_statuses.push(Reading::Error);
+                            continue;
+                        }
+                    };
                     let name = entry.file_name();
                     let Some(pid) = name.to_str().and_then(|n| n.parse::<u32>().ok()) else {
                         continue;
@@ -247,6 +254,11 @@ impl ProcessSource {
             Reading::Error
         } else if fdinfo_statuses
             .iter()
+            .any(|status| matches!(status, Reading::Absent))
+        {
+            Reading::Absent
+        } else if fdinfo_statuses
+            .iter()
             .any(|status| matches!(status, Reading::Value(())))
         {
             Reading::Value(())
@@ -270,14 +282,30 @@ impl ProcessSource {
     ) -> Reading<()> {
         let entries = match std::fs::read_dir(proc_dir.join("fdinfo")) {
             Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Reading::Value(());
+            }
             Err(error) => return process_error_reading(&error),
         };
         // One DRM client may be visible through several duplicated fds;
         // count each client id once.
         let mut seen_clients: Vec<(Option<PciBdf>, String)> = Vec::new();
-        for entry in entries.flatten() {
-            let Ok(content) = std::fs::read_to_string(entry.path()) else {
-                continue;
+        let mut status = Reading::Value(());
+        for entry in entries {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(_) => {
+                    status = merge_status(status, Reading::Error);
+                    continue;
+                }
+            };
+            let content = match std::fs::read_to_string(entry.path()) {
+                Ok(content) => content,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(error) => {
+                    status = merge_status(status, process_error_reading(&error));
+                    continue;
+                }
             };
             if !content.contains("drm-driver:") || !content.contains("amdgpu") {
                 continue;
@@ -333,7 +361,7 @@ impl ProcessSource {
                 None => {}
             }
         }
-        Reading::Value(())
+        status
     }
 
     /// Reads one KFD proc entry: queue membership and `vram_<gpuid>`.
