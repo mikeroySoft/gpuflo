@@ -1,0 +1,28 @@
+[package]
+name = "gruflo"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.96"
+description = "Read-only terminal instrument for Linux amdgpu GPUs: activity, memory occupancy, and source-backed health within one second"
+repository = "https://github.com/michaelroy-amd/gruflo"
+license = "MIT"
+readme = "README.md"
+keywords = ["amd", "gpu", "amdgpu", "telemetry", "tui"]
+categories = ["command-line-utilities", "visualization"]
+
+[dependencies]
+crossbeam-channel = "0.5.15"
+crossterm = "0.29.0"
+lexopt = "0.3.1"
+libloading = "0.8.9"
+ratatui = "0.30.0"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+signal-hook = "0.3.18"
+thiserror = "2.0.17"
+time = { version = "0.3.44", features = ["formatting", "parsing", "macros", "local-offset"] }
+toml = "0.9.8"
+
+[profile.release]
+lto = true
+codegen-units = 1
