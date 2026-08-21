@@ -50,7 +50,7 @@ fn spawn_gruflo(tag: &str, extra_env: &[(&str, &str)]) -> Pty {
     let (master, slave) = unsafe {
         let mut master: libc::c_int = 0;
         let mut slave: libc::c_int = 0;
-        let mut winsize = libc::winsize {
+        let winsize = libc::winsize {
             ws_row: 40,
             ws_col: 120,
             ws_xpixel: 0,
@@ -61,7 +61,7 @@ fn spawn_gruflo(tag: &str, extra_env: &[(&str, &str)]) -> Pty {
             &mut slave,
             std::ptr::null_mut(),
             std::ptr::null_mut(),
-            &mut winsize,
+            &winsize,
         );
         assert_eq!(rc, 0, "openpty failed");
         (OwnedFd::from_raw_fd(master), OwnedFd::from_raw_fd(slave))

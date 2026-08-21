@@ -118,8 +118,6 @@ pub(crate) struct AmdSmi {
     api: Api,
     /// Raw processor handles; never leave this module.
     processors: Vec<(*mut c_void, PciBdf)>,
-    /// Reported library version, for the detail surface.
-    pub version: (u32, u32, u32, u32),
 }
 
 // The library is used from one enrichment lane only; raw handles are opaque
@@ -204,7 +202,6 @@ impl AmdSmi {
             _lib: lib,
             api,
             processors: Vec::new(),
-            version: (version.year, version.major, version.minor, version.release),
         };
         match loaded.enumerate() {
             Ok(processors) => {
@@ -492,7 +489,6 @@ uint32_t amdsmi_get_gpu_vram_usage(void *handle, vram_t *vram) {
     fn good_library_initializes_once_and_returns_owned_samples() {
         let path = build_fake("gruflo_fake_good", GOOD_LIBRARY);
         let smi = AmdSmi::load_from(&[path.to_str().unwrap()]).unwrap();
-        assert_eq!(smi.version, (25, 1, 0, 0));
         let samples = smi.sample();
         assert_eq!(samples.len(), 1);
         let sample = &samples[0];

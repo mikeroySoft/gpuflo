@@ -354,7 +354,7 @@ fn render_strip(frame: &mut Frame<'_>, view: &View<'_>, area: Rect) {
     if start > 0 {
         spans.push(Span::styled("‹ ", styler.fg(palette.dim)));
     }
-    for index in start..end {
+    for (index, label) in labels.iter_mut().enumerate().take(end).skip(start) {
         if index > start {
             spans.push(Span::styled("  ", styler.fg(palette.dim)));
         }
@@ -363,7 +363,7 @@ fn render_strip(frame: &mut Frame<'_>, view: &View<'_>, area: Rect) {
         } else {
             styler.fg(palette.muted)
         };
-        spans.push(Span::styled(std::mem::take(&mut labels[index]), style));
+        spans.push(Span::styled(std::mem::take(label), style));
     }
     if end < labels.len() {
         spans.push(Span::styled(" ›", styler.fg(palette.dim)));

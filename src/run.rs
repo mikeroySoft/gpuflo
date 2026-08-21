@@ -107,7 +107,6 @@ fn first_snapshot(monitor: &Monitor) -> Result<Snapshot, String> {
             Ok(MonitorEvent::Snapshot(snapshot)) => return Ok(snapshot),
             Ok(MonitorEvent::Notice(_)) => continue,
             Ok(MonitorEvent::Fatal(error)) => return Err(error.to_string()),
-            Ok(_) => continue,
             Err(_) => return Err("no snapshot could be produced".to_owned()),
         }
     }
@@ -228,7 +227,6 @@ fn json_stream(monitor: Monitor) -> u8 {
                 eprintln!("gruflo: {error}");
                 break EXIT_FATAL;
             }
-            Ok(_) => {}
             Err(crate::monitor::ReceiveTimeoutError::Timeout) => {}
             Err(crate::monitor::ReceiveTimeoutError::Closed) => break EXIT_FATAL,
         }

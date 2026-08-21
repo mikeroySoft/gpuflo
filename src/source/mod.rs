@@ -70,9 +70,13 @@ impl<T> Reading<T> {
 /// runtime-suspended device ("deny access" without waking it); `EACCES` is
 /// genuine permission denial; a missing node is structural absence.
 pub(crate) fn kernel_error_reading<T>(error: &std::io::Error) -> Reading<T> {
+    /// `EPERM`.
+    const EPERM: i32 = 1;
+    /// `EACCES`.
+    const EACCES: i32 = 13;
     match error.raw_os_error() {
-        Some(libc_eperm) if libc_eperm == 1 => Reading::Asleep,
-        Some(libc_eacces) if libc_eacces == 13 => Reading::PermissionDenied,
+        Some(EPERM) => Reading::Asleep,
+        Some(EACCES) => Reading::PermissionDenied,
         _ if error.kind() == std::io::ErrorKind::NotFound => Reading::Absent,
         _ => Reading::Error,
     }

@@ -325,10 +325,7 @@ mod tests {
         }
     }
 
-    fn outcome<'a>(
-        batch: &'a MetricBatch,
-        metric: MetricKey,
-    ) -> &'a Result<Value, ObservationState> {
+    fn outcome(batch: &MetricBatch, metric: MetricKey) -> &Result<Value, ObservationState> {
         &batch
             .results
             .iter()

@@ -11,17 +11,17 @@ keywords = ["amd", "gpu", "amdgpu", "telemetry", "tui"]
 categories = ["command-line-utilities", "visualization"]
 
 [dependencies]
-crossbeam-channel = "0.5.15"
+crossbeam-channel = "0.5.16"
 crossterm = "0.29.0"
-lexopt = "0.3.1"
+lexopt = "0.3.2"
 libloading = "0.8.9"
-ratatui = "0.30.0"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.145"
+ratatui = "0.30.2"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
 signal-hook = "0.3.18"
-thiserror = "2.0.17"
-time = { version = "0.3.44", features = ["formatting", "parsing", "macros", "local-offset"] }
-toml = "0.9.8"
+thiserror = "2.0.20"
+time = { version = "0.3.55", features = ["formatting", "parsing", "macros", "local-offset"] }
+toml = "0.9.12"
 
 [profile.release]
 lto = true

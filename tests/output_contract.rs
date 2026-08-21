@@ -243,10 +243,10 @@ fn no_null_and_no_non_finite_numbers_anywhere() {
     let json = to_json(Some(3));
     walk(&json, "$", &mut |path, value| {
         assert!(!value.is_null(), "{path} is null");
-        if let Some(number) = value.as_number() {
-            if let Some(float) = number.as_f64() {
-                assert!(float.is_finite(), "{path} is non-finite: {number}");
-            }
+        if let Some(number) = value.as_number()
+            && let Some(float) = number.as_f64()
+        {
+            assert!(float.is_finite(), "{path} is non-finite: {number}");
         }
     });
 }

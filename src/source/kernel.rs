@@ -343,7 +343,6 @@ pub(crate) struct KernelSource {
 struct CardEntry {
     device: PathBuf,
     bdf: PciBdf,
-    function: u32,
     has_gpu_metrics: bool,
 }
 
@@ -694,12 +693,10 @@ fn probe_card(device: &Path) -> Option<CardEntry> {
         return None;
     }
     let bdf = PciBdf::parse(&slot?).ok()?;
-    let function = u32::from_str_radix(&bdf.as_str()[11..], 16).unwrap_or(0);
     let has_gpu_metrics = device.join("gpu_metrics").exists();
     Some(CardEntry {
         device: device.to_owned(),
         bdf,
-        function,
         has_gpu_metrics,
     })
 }

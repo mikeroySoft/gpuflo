@@ -8,7 +8,6 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::time::Instant;
 
 use super::Reading;
 use crate::model::{PciBdf, Timestamp};
@@ -36,7 +35,6 @@ pub(crate) struct ProcessRow {
 #[derive(Debug, Clone)]
 pub(crate) struct ProcessSample {
     pub read_wall: Timestamp,
-    pub read_mono: Instant,
     pub rows: Vec<ProcessRow>,
 }
 
@@ -111,7 +109,6 @@ impl ProcessSource {
     /// limited fdinfo still yields an honest row.
     pub fn scan(&self) -> ProcessSample {
         let read_wall = Timestamp::now();
-        let read_mono = Instant::now();
         let topology = self.kfd_topology();
 
         // (pid, Some(bdf)) or (pid, None) for unresolvable associations.
@@ -185,11 +182,7 @@ impl ProcessSource {
             key(b).cmp(&key(a)).then_with(|| a.pid.cmp(&b.pid))
         });
 
-        ProcessSample {
-            read_wall,
-            read_mono,
-            rows,
-        }
+        ProcessSample { read_wall, rows }
     }
 
     /// Reads every fdinfo entry of one PID, deduplicating DRM clients.
@@ -349,7 +342,7 @@ mod tests {
         )
     }
 
-    fn row<'a>(sample: &'a ProcessSample, pid: u32) -> &'a ProcessRow {
+    fn row(sample: &ProcessSample, pid: u32) -> &ProcessRow {
         sample.rows.iter().find(|r| r.pid == pid).unwrap()
     }
 

@@ -481,6 +481,7 @@ impl Reducer {
     }
 
     /// Number of currently confirmed physical GPUs.
+    #[cfg(test)]
     pub fn gpu_count(&self) -> usize {
         self.gpus.len()
     }

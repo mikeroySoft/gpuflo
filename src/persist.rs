@@ -27,7 +27,7 @@ pub(crate) fn store(path: &Path, record: &DailySummaryRecord) -> std::io::Result
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
     std::fs::create_dir_all(parent)?;
     let mut tmp = path.as_os_str().to_owned();
-    tmp.push(&format!(".tmp.{}", std::process::id()));
+    tmp.push(format!(".tmp.{}", std::process::id()));
     let tmp = PathBuf::from(tmp);
     let result = (|| {
         let mut file = std::fs::File::create(&tmp)?;

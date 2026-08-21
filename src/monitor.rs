@@ -716,6 +716,7 @@ impl Coordinator {
     fn drain_results(&mut self) {
         let gpu_ids: Vec<PhysicalGpuId> = self.kernel_lanes.keys().cloned().collect();
         for gpu_id in gpu_ids {
+            #[allow(clippy::while_let_loop)] // the lane is re-borrowed inside the body
             loop {
                 let Some(lane) = self.kernel_lanes.get_mut(&gpu_id) else {
                     break;

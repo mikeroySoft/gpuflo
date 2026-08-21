@@ -129,12 +129,12 @@ where
     };
 
     let set_output = |mode: OutputMode, current: &mut Option<OutputMode>| {
-        if let Some(existing) = current {
-            if *existing != mode {
-                return Err(UsageError(
-                    "--once, --json, --json-stream, and --tiny are mutually exclusive".to_owned(),
-                ));
-            }
+        if let Some(existing) = current
+            && *existing != mode
+        {
+            return Err(UsageError(
+                "--once, --json, --json-stream, and --tiny are mutually exclusive".to_owned(),
+            ));
         }
         *current = Some(mode);
         Ok(())
