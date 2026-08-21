@@ -167,6 +167,8 @@ The contract is satisfied when:
 - the process overlay never claims unsupported utilization precision;
 - all responsive TUI and machine-readable modes use the same metric meanings.
 
+The companion [machine-readable output design](./2026-08-20-gruflo-machine-readable-output-design.md) fixes the text, JSON, stream, tiny, topology, state, unit, timestamp, versioning, and exit contracts for those meanings.
+
 ## Evidence
 
 - [Inventory AMD telemetry sources and support](https://github.com/michaelroy-amd/gruflo/issues/8)
