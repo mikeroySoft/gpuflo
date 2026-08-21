@@ -142,6 +142,14 @@ impl Fields<'_> {
     }
 }
 
+/// Throttle status bits with the memset sentinel treated as no data.
+fn throttle_bits(raw: Option<u32>) -> u32 {
+    match raw {
+        Some(0xFFFF_FFFF) | None => 0,
+        Some(bits) => bits,
+    }
+}
+
 /// Parses one supported `gpu_metrics` blob after validating its header.
 pub(crate) fn parse_gpu_metrics(bytes: &[u8]) -> Result<GpuMetricsBlob, BlobError> {
     if bytes.len() < 4 {
@@ -188,8 +196,8 @@ pub(crate) fn parse_gpu_metrics(bytes: &[u8]) -> Result<GpuMetricsBlob, BlobErro
             gfx_clock_hz: f.r16(54).map(|mhz| mhz * 1_000_000),
             energy: f.r64(24).map(|raw| (raw, ENERGY_JOULES_PER_COUNT)),
             throttle: ThrottleReading::Status {
-                status: f.u32(68).unwrap_or(0),
-                indep: f.u64(112),
+                status: throttle_bits(f.u32(68)),
+                indep: f.r64(112),
             },
         },
         (1, content @ 4..=8) => {
@@ -207,15 +215,15 @@ pub(crate) fn parse_gpu_metrics(bytes: &[u8]) -> Result<GpuMetricsBlob, BlobErro
             };
             let throttle = match content {
                 4 => ThrottleReading::Status {
-                    status: f.u32(40).unwrap_or(0),
+                    status: throttle_bits(f.u32(40)),
                     indep: None,
                 },
                 5 => ThrottleReading::Status {
-                    status: f.u32(104).unwrap_or(0),
+                    status: throttle_bits(f.u32(104)),
                     indep: None,
                 },
                 6 => ThrottleReading::Residency {
-                    counter: f.u32(32).unwrap_or(0),
+                    counter: throttle_bits(f.u32(32)),
                     prochot: f.u32(36).unwrap_or(0),
                     ppt: f.u32(40).unwrap_or(0),
                     socket_thm: f.u32(44).unwrap_or(0),
@@ -223,7 +231,7 @@ pub(crate) fn parse_gpu_metrics(bytes: &[u8]) -> Result<GpuMetricsBlob, BlobErro
                     hbm_thm: f.u32(52).unwrap_or(0),
                 },
                 _ => ThrottleReading::Residency {
-                    counter: f.u32(40).unwrap_or(0),
+                    counter: throttle_bits(f.u32(40)),
                     prochot: f.u32(44).unwrap_or(0),
                     ppt: f.u32(48).unwrap_or(0),
                     socket_thm: f.u32(52).unwrap_or(0),
@@ -254,8 +262,8 @@ pub(crate) fn parse_gpu_metrics(bytes: &[u8]) -> Result<GpuMetricsBlob, BlobErro
             gfx_clock_hz: Reading::Absent,
             energy: None,
             throttle: ThrottleReading::Status {
-                status: f.u32(108).unwrap_or(0),
-                indep: if content >= 2 { f.u64(120) } else { None },
+                status: throttle_bits(f.u32(108)),
+                indep: if content >= 2 { f.r64(120) } else { None },
             },
         },
         // v2.4 documents centi-Celsius, centi-percent, mW, and MHz.
@@ -267,8 +275,8 @@ pub(crate) fn parse_gpu_metrics(bytes: &[u8]) -> Result<GpuMetricsBlob, BlobErro
             gfx_clock_hz: f.r16(76).map(|mhz| mhz * 1_000_000),
             energy: None,
             throttle: ThrottleReading::Status {
-                status: f.u32(108).unwrap_or(0),
-                indep: f.u64(120),
+                status: throttle_bits(f.u32(108)),
+                indep: f.r64(120),
             },
         },
         // v3.0 documents [0-100] activity, mW power, MHz clocks; its
@@ -306,6 +314,63 @@ fn indep_reasons(indep: u64) -> Vec<&'static str> {
 // ---------------------------------------------------------------------------
 // Discovery
 // ---------------------------------------------------------------------------
+
+/// KFD `FB_PUBLIC` heap type: an APU framebuffer carved from system memory.
+const KFD_HEAP_FB_PUBLIC: u64 = 2;
+
+/// Maps PCI BDFs to their KFD framebuffer heap type, when the world-readable
+/// KFD topology is present. `heap_type 2` (FB_PUBLIC) identifies an APU;
+/// `heap_type 1` (FB_PRIVATE) identifies dedicated discrete VRAM.
+fn kfd_heap_types(root: &Path) -> HashMap<PciBdf, u64> {
+    let mut map = HashMap::new();
+    let nodes = root.join("sys/class/kfd/kfd/topology/nodes");
+    let Ok(entries) = std::fs::read_dir(&nodes) else {
+        return map;
+    };
+    for entry in entries.flatten() {
+        let dir = entry.path();
+        let Ok(properties) = std::fs::read_to_string(dir.join("properties")) else {
+            continue;
+        };
+        let mut domain = 0u64;
+        let mut location = None;
+        for line in properties.lines() {
+            let mut parts = line.split_whitespace();
+            match (parts.next(), parts.next()) {
+                (Some("domain"), Some(value)) => domain = value.parse().unwrap_or(0),
+                (Some("location_id"), Some(value)) => location = value.parse::<u64>().ok(),
+                _ => {}
+            }
+        }
+        let Some(location) = location else { continue };
+        let bus = (location >> 8) & 0xFF;
+        let device = (location >> 3) & 0x1F;
+        let function = location & 0x7;
+        let Ok(bdf) = PciBdf::parse(&format!("{domain:04x}:{bus:02x}:{device:02x}.{function:x}"))
+        else {
+            continue;
+        };
+        let Ok(banks) = std::fs::read_dir(dir.join("mem_banks")) else {
+            continue;
+        };
+        for bank in banks.flatten() {
+            let Ok(bank_properties) = std::fs::read_to_string(bank.path().join("properties"))
+            else {
+                continue;
+            };
+            for line in bank_properties.lines() {
+                let mut parts = line.split_whitespace();
+                if let (Some("heap_type"), Some(value)) = (parts.next(), parts.next())
+                    && let Ok(heap) = value.parse::<u64>()
+                    && heap != 0
+                {
+                    map.insert(bdf.clone(), heap);
+                }
+            }
+        }
+    }
+    map
+}
 
 /// Resolved read paths for one XCP partition device.
 #[derive(Debug, Clone)]
@@ -382,6 +447,7 @@ impl KernelSource {
         }
         // Group partition functions of one package by domain:bus:device.
         cards.sort_by(|a, b| a.bdf.as_str().cmp(b.bdf.as_str()));
+        let heap_types = kfd_heap_types(&self.root);
         let mut devices: Vec<KernelDevice> = Vec::new();
         let mut index = 0;
         while index < cards.len() {
@@ -391,7 +457,7 @@ impl KernelSource {
                 group_end += 1;
             }
             let group = &cards[index..group_end];
-            devices.push(build_device(group));
+            devices.push(build_device(group, &heap_types));
             index = group_end;
         }
         devices
@@ -575,9 +641,7 @@ impl KernelSource {
             ThrottleReading::Status { status, indep } => {
                 if *status != 0 {
                     let reasons = match indep {
-                        Some(indep) if *indep != 0 && *indep != u64::MAX => {
-                            indep_reasons(*indep).join(", ")
-                        }
+                        Some(indep) if *indep != 0 => indep_reasons(*indep).join(", "),
                         _ => String::new(),
                     };
                     health.push(KernelHealthSignal::ThrottleActive { reasons });
@@ -702,7 +766,7 @@ fn probe_card(device: &Path) -> Option<CardEntry> {
 }
 
 /// Builds one physical GPU from its sorted partition-function group.
-fn build_device(group: &[CardEntry]) -> KernelDevice {
+fn build_device(group: &[CardEntry], heap_types: &HashMap<PciBdf, u64>) -> KernelDevice {
     // The primary partition owns the device-wide gpu_metrics node; fall back
     // to the lowest function when none carries one.
     let primary_index = group
@@ -739,8 +803,12 @@ fn build_device(group: &[CardEntry]) -> KernelDevice {
             }
         });
 
-    // The applicable pool: GTT when the driver exposes a larger GTT pool
-    // than the (carveout) VRAM pool, matching APU reporting practice.
+    // The applicable pool. An APU must label its system-memory pool as GTT
+    // instead of presenting the carveout as dedicated VRAM. Primary evidence
+    // is the world-readable KFD topology heap type (FB_PUBLIC identifies an
+    // APU framebuffer); without KFD topology, a small carveout-sized VRAM
+    // pool beside a larger GTT pool is the fallback evidence. A discrete GPU
+    // whose GTT pool merely exceeds VRAM (large system RAM) stays VRAM.
     let vram_total = match read_u64(&primary.device.join("mem_info_vram_total")) {
         Reading::Value(v) => v,
         _ => 0,
@@ -749,7 +817,12 @@ fn build_device(group: &[CardEntry]) -> KernelDevice {
         Reading::Value(v) => v,
         _ => 0,
     };
-    let (pool, used_node, total_node) = if gtt_total > vram_total {
+    const CARVEOUT_LIMIT: u64 = 4 * 1024 * 1024 * 1024;
+    let is_apu_pool = match heap_types.get(&primary.bdf) {
+        Some(&heap) => heap == KFD_HEAP_FB_PUBLIC,
+        None => vram_total <= CARVEOUT_LIMIT && gtt_total > vram_total,
+    };
+    let (pool, used_node, total_node) = if is_apu_pool {
         (MemoryPool::GTT, "mem_info_gtt_used", "mem_info_gtt_total")
     } else {
         (
@@ -921,6 +994,25 @@ mod tests {
         assert_eq!(part.mem_total_bytes, Reading::Value(17_179_869_184));
         // mem_busy_percent absent on this APU: structural absence.
         assert_eq!(part.mem_ctl_centipercent, Reading::Absent);
+    }
+
+    #[test]
+    fn discrete_gpu_with_larger_gtt_pool_stays_vram() {
+        // Live-host regression: 32 GiB VRAM beside a bigger system-RAM GTT
+        // pool with KFD FB_PRIVATE evidence must not be labelled GTT, and
+        // sentinel throttle fields must not fabricate a throttle.
+        let (mut source, devices) = source("discrete-large-gtt");
+        assert_eq!(devices[0].disc.pool, MemoryPool::VRAM);
+        let sample = source.collect_fast(&devices[0]);
+        assert_eq!(
+            sample.partitions[0].mem_total_bytes,
+            Reading::Value(34_208_743_424)
+        );
+        let slow = source.collect_slow(&devices[0]);
+        assert!(
+            slow.health.is_empty(),
+            "sentinel throttle bits are not a throttle"
+        );
     }
 
     #[test]

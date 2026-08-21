@@ -1,0 +1,5 @@
+Reduced from a live Radeon AI PRO R9700 (RDNA4) host observed during
+implementation: 32 GiB dedicated VRAM beside a larger system-RAM GTT
+pool, KFD FB_PRIVATE heap, and a v1.3 blob whose throttle fields keep
+the memset 0xFF sentinel. Guards the discrete-vs-APU pool rule and the
+throttle sentinel rule. Identifiers sanitized.
