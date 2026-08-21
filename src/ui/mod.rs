@@ -259,7 +259,21 @@ impl UiState {
 
     fn handle_key(&mut self, code: KeyCode) -> Action {
         match code {
-            KeyCode::Char('q') | KeyCode::Esc => Action::Quit,
+            KeyCode::Char('q') => Action::Quit,
+            KeyCode::Esc => {
+                if self.show_help {
+                    self.show_help = false;
+                    Action::None
+                } else if self.show_processes {
+                    self.show_processes = false;
+                    Action::SetProcessScope(None)
+                } else if self.show_detail {
+                    self.show_detail = false;
+                    Action::None
+                } else {
+                    Action::Quit
+                }
+            }
             KeyCode::Left | KeyCode::Char('h') => self.select_step(-1),
             KeyCode::Right | KeyCode::Char('l') => self.select_step(1),
             KeyCode::Char('t') => {

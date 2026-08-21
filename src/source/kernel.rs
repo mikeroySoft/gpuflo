@@ -435,9 +435,66 @@ pub(crate) struct KernelDevice {
     /// Primary partition device directory (owns `gpu_metrics`).
     primary: PathBuf,
     hwmon: Option<PathBuf>,
+
     /// hwmon channel index whose label is `junction`, when present.
     hotspot_channel: Option<u32>,
     partitions: Vec<PartitionPaths>,
+}
+fn parse_amd_pci_names(text: &str) -> HashMap<String, String> {
+    let mut names = HashMap::new();
+    let mut in_amd = false;
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if !line.starts_with(char::is_whitespace) {
+            in_amd = line
+                .split_whitespace()
+                .next()
+                .is_some_and(|vendor| vendor.eq_ignore_ascii_case("1002"));
+            continue;
+        }
+        if !in_amd || line.starts_with("\t\t") {
+            continue;
+        }
+        let mut fields = line.split_whitespace();
+        let Some(device) = fields.next() else {
+            continue;
+        };
+        if device.len() != 4 || !device.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            continue;
+        }
+        let description = fields.collect::<Vec<_>>().join(" ");
+        if description.is_empty() {
+            continue;
+        }
+        let preferred = description
+            .rfind('[')
+            .filter(|_| description.ends_with(']'))
+            .map(|start| &description[start + 1..description.len() - 1])
+            .unwrap_or(&description);
+        let name = if preferred.starts_with("AMD ") {
+            preferred.to_owned()
+        } else {
+            format!("AMD {preferred}")
+        };
+        names.insert(device.to_ascii_lowercase(), name);
+    }
+    names
+}
+
+fn amd_pci_names(root: &Path) -> HashMap<String, String> {
+    for path in [
+        root.join("usr/share/hwdata/pci.ids"),
+        root.join("usr/share/misc/pci.ids"),
+        root.join("usr/share/pci.ids"),
+    ] {
+        if let Ok(text) = std::fs::read_to_string(path) {
+            return parse_amd_pci_names(&text);
+        }
+    }
+    HashMap::new()
 }
 
 /// Kernel source adapter. Owns per-GPU throttle-residency baselines and a
@@ -493,6 +550,7 @@ impl KernelSource {
         // Group partition functions of one package by domain:bus:device.
         cards.sort_by(|a, b| a.bdf.as_str().cmp(b.bdf.as_str()));
         let heap_types = kfd_heap_types(&self.root);
+        let pci_names = amd_pci_names(&self.root);
         let mut devices: Vec<KernelDevice> = Vec::new();
         let mut index = 0;
         while index < cards.len() {
@@ -502,7 +560,7 @@ impl KernelSource {
                 group_end += 1;
             }
             let group = &cards[index..group_end];
-            devices.push(build_device(group, &heap_types)?);
+            devices.push(build_device(group, &heap_types, &pci_names)?);
             index = group_end;
         }
         Ok(devices)
@@ -877,6 +935,7 @@ fn safe_source_text(text: &str) -> String {
 fn build_device(
     group: &[CardEntry],
     heap_types: &HashMap<PciBdf, u64>,
+    pci_names: &HashMap<String, String>,
 ) -> Result<KernelDevice, String> {
     let owners: Vec<_> = group
         .iter()
@@ -920,13 +979,19 @@ fn build_device(
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| {
             let device_id = std::fs::read_to_string(primary.device.join("device"))
-                .map(|s| s.trim().to_owned())
+                .map(|s| safe_source_text(&s))
                 .unwrap_or_default();
-            if device_id.is_empty() {
-                "AMD GPU".to_owned()
-            } else {
-                format!("AMD GPU {device_id}")
-            }
+            let key = device_id
+                .strip_prefix("0x")
+                .unwrap_or(&device_id)
+                .to_ascii_lowercase();
+            pci_names.get(&key).cloned().unwrap_or_else(|| {
+                if device_id.is_empty() {
+                    "AMD GPU".to_owned()
+                } else {
+                    format!("AMD GPU {device_id}")
+                }
+            })
         });
 
     // KFD heap topology is explicit physical-memory evidence. Without it,
@@ -1319,5 +1384,23 @@ mod tests {
             validate_microwatts(Reading::Value(30_000_000_000)),
             Reading::Malformed
         );
+    }
+
+    #[test]
+    fn local_pci_database_prefers_bracketed_marketing_name() {
+        let names = parse_amd_pci_names(
+            "1002  Advanced Micro Devices, Inc. [AMD/ATI]\n\
+             # comment inside vendor section\n\
+             \n\
+             \t7551  Navi 48 [Radeon AI PRO R9700]\n\
+             \t\t1da2 e490  subsystem\n\
+             10de  NVIDIA Corporation\n\
+             \t7551  unrelated\n",
+        );
+        assert_eq!(
+            names.get("7551").map(String::as_str),
+            Some("AMD Radeon AI PRO R9700")
+        );
+        assert_eq!(names.len(), 1);
     }
 }

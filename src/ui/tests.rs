@@ -475,7 +475,7 @@ fn process_key_scopes_to_the_selected_gpu() {
         Action::SetProcessScope(Some(PhysicalGpuId::new("gpu-b")))
     );
     assert_eq!(
-        state.handle_key(KeyCode::Char('p')),
+        state.handle_key(KeyCode::Esc),
         Action::SetProcessScope(None)
     );
 }
@@ -488,6 +488,27 @@ fn keys_cycle_session_presentation_and_quit() {
     assert_eq!(state.handle_key(KeyCode::Char('m')), Action::None);
     assert_eq!(state.mode_preference, ModePreference::Mode);
     assert_eq!(state.handle_key(KeyCode::Char('q')), Action::Quit);
+    assert_eq!(state.handle_key(KeyCode::Esc), Action::Quit);
+}
+
+#[test]
+fn escape_closes_topmost_modal_before_quitting() {
+    let mut state = state_with_model(true);
+    assert_eq!(state.handle_key(KeyCode::Char('d')), Action::None);
+    assert_eq!(
+        state.handle_key(KeyCode::Char('p')),
+        Action::SetProcessScope(Some(PhysicalGpuId::new("gpu-a")))
+    );
+    assert_eq!(state.handle_key(KeyCode::Char('?')), Action::None);
+    assert_eq!(state.handle_key(KeyCode::Esc), Action::None);
+    assert!(!state.show_help && state.show_processes && state.show_detail);
+    assert_eq!(
+        state.handle_key(KeyCode::Esc),
+        Action::SetProcessScope(None)
+    );
+    assert!(!state.show_processes && state.show_detail);
+    assert_eq!(state.handle_key(KeyCode::Esc), Action::None);
+    assert!(!state.show_detail);
     assert_eq!(state.handle_key(KeyCode::Esc), Action::Quit);
 }
 
@@ -555,10 +576,7 @@ fn process_overlay_lists_honest_attribution() {
         "privilege limitation must be shown, not hidden"
     );
     assert!(text.contains("deadbeefcafe"));
-    assert!(
-        text.contains("attributed memory only"),
-        "attribution limit footer missing"
-    );
+    assert!(!text.contains("attributed memory only"));
 }
 
 #[test]

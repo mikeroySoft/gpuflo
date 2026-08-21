@@ -770,11 +770,6 @@ fn render_processes(frame: &mut Frame<'_>, view: &View<'_>, area: Rect) {
             ));
         }
     }
-    lines.push(Line::raw(""));
-    lines.push(Line::styled(
-        "attributed memory only · the kernel exposes no per-process GPU utilization",
-        styler.fg(palette.dim),
-    ));
 
     let height = (lines.len() as u16).saturating_add(2);
     let inner = overlay_box(frame, styler, area, 96, height, " processes ");
