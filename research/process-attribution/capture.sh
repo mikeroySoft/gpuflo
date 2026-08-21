@@ -276,7 +276,8 @@ capture_fdinfo() {
 }
 
 capture_kfd() {
-    local pid=$1 output=$2 root="/sys/class/kfd/kfd/proc/$pid"
+    local pid=$1 output=$2
+    local root="/sys/class/kfd/kfd/proc/$pid"
     : > "$output"
     if [[ ! -e "$root" ]]; then
         printf 'state\tkfd_process_absent\n' > "$output"
