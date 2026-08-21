@@ -3,7 +3,10 @@
 //! canonical batches. Owns no freshness, history, health priority, or
 //! rendering.
 
-use crate::model::ObservationState;
+use std::collections::HashMap;
+
+use crate::model::{ObservationState, PartitionId, PciBdf, PhysicalGpuId};
+use crate::source::amdsmi::AmdSmiSample;
 use crate::source::{KernelFastSample, KernelHealthSignal, KernelSlowSample, Reading};
 use crate::state::health::HealthCandidate;
 use crate::state::{
@@ -187,6 +190,57 @@ pub(crate) fn kernel_slow(sample: KernelSlowSample) -> (Vec<MetricBatch>, Source
             candidates,
         },
     )
+}
+
+/// Normalizes AMD SMI enrichment samples. Values map onto the partition the
+/// processor BDF resolves to; unknown BDFs are dropped. Kernel-first
+/// precedence is enforced by the reducer, never here.
+pub(crate) fn amdsmi(
+    samples: Vec<AmdSmiSample>,
+    partitions: &HashMap<PciBdf, (PhysicalGpuId, PartitionId)>,
+) -> Vec<MetricBatch> {
+    let mut batches = Vec::with_capacity(samples.len());
+    for sample in samples {
+        let Some((gpu, partition)) = partitions.get(&sample.bdf) else {
+            continue;
+        };
+        batches.push(MetricBatch {
+            gpu: gpu.clone(),
+            partition: Some(partition.clone()),
+            origin: Origin::AmdSmi,
+            lane: Lane::Fast,
+            observed_wall: sample.read_wall,
+            observed_mono: sample.read_mono,
+            results: vec![
+                result(
+                    MetricKey::Partition(PartitionMetric::ActivityPercent),
+                    sample.gfx_activity_percent,
+                    false,
+                    |v| Value::F64(v as f64),
+                ),
+                result(
+                    MetricKey::Partition(PartitionMetric::MemCtlActivityPercent),
+                    sample.umc_activity_percent,
+                    false,
+                    |v| Value::F64(v as f64),
+                ),
+                result(
+                    MetricKey::Partition(PartitionMetric::MemUsedBytes),
+                    sample.vram_used_bytes,
+                    false,
+                    bytes,
+                ),
+                result(
+                    MetricKey::Partition(PartitionMetric::MemTotalBytes),
+                    sample.vram_total_bytes,
+                    false,
+                    bytes,
+                ),
+            ],
+            energy_accumulator: None,
+        });
+    }
+    batches
 }
 
 /// Composes one factual candidate from a kernel health signal.

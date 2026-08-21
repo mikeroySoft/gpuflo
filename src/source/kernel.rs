@@ -312,6 +312,7 @@ fn indep_reasons(indep: u64) -> Vec<&'static str> {
 struct PartitionPaths {
     id: PartitionId,
     is_primary: bool,
+    bdf: PciBdf,
     device: PathBuf,
     used_node: &'static str,
     total_node: &'static str,
@@ -783,6 +784,7 @@ fn build_device(group: &[CardEntry]) -> KernelDevice {
         .map(|(index, card)| PartitionPaths {
             id: PartitionId::new(format!("{gpu_id}-xcp-{index}")),
             is_primary: std::ptr::eq(card, primary),
+            bdf: card.bdf.clone(),
             device: card.device.clone(),
             used_node,
             total_node,
@@ -802,6 +804,7 @@ fn build_device(group: &[CardEntry]) -> KernelDevice {
                 .map(|p| DiscoveredPartition {
                     id: p.id.clone(),
                     is_primary: p.is_primary,
+                    bdf: p.bdf.clone(),
                 })
                 .collect(),
         },

@@ -112,6 +112,8 @@ pub(crate) struct SourceHealthReport {
 pub(crate) struct DiscoveredPartition {
     pub id: PartitionId,
     pub is_primary: bool,
+    /// PCI address of the partition's own DRM function.
+    pub bdf: PciBdf,
 }
 
 /// One discovered physical GPU and its partition topology.
@@ -150,10 +152,20 @@ pub(crate) struct RenderGpu {
     pub session_peak_activity: Option<f64>,
 }
 
+/// Latest process-overlay scan, present only while the overlay is scoped.
+#[derive(Debug, Clone)]
+pub(crate) struct ProcessOverlay {
+    pub scanned_at: Timestamp,
+    pub rows: Vec<crate::source::process::ProcessRow>,
+    /// Resolves row `drm-pdev` BDFs to stable physical GPU identities.
+    pub gpu_by_bdf: std::collections::HashMap<PciBdf, PhysicalGpuId>,
+}
+
 /// Immutable presentation projection: canonical current observations plus
 /// bounded history. Never contains layout, styles, or animation state.
 #[derive(Debug, Clone)]
 pub(crate) struct RenderModel {
     pub snapshot: Snapshot,
     pub gpus: Vec<RenderGpu>,
+    pub processes: Option<ProcessOverlay>,
 }

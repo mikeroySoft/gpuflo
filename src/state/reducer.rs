@@ -551,7 +551,11 @@ impl Reducer {
     }
 
     /// Projects the private presentation model aligned with `snapshot`.
-    pub fn render_model(&self, snapshot: &Snapshot) -> RenderModel {
+    pub fn render_model(
+        &self,
+        snapshot: &Snapshot,
+        processes: Option<super::ProcessOverlay>,
+    ) -> RenderModel {
         let gpus = self
             .gpus
             .iter()
@@ -574,6 +578,7 @@ impl Reducer {
         RenderModel {
             snapshot: snapshot.clone(),
             gpus,
+            processes,
         }
     }
 }
@@ -714,6 +719,7 @@ mod tests {
                 .map(|n| DiscoveredPartition {
                     id: part_id(n),
                     is_primary: n == 0,
+                    bdf: PciBdf::parse(&format!("0000:41:00.{n}")).unwrap(),
                 })
                 .collect(),
         }
@@ -780,7 +786,7 @@ mod tests {
             &Observation::value(80.0, clock.at(0).wall)
         );
         // History has exactly one fresh slot and one gap.
-        let render = r.render_model(&snapshot);
+        let render = r.render_model(&snapshot, None);
         assert_eq!(render.gpus[0].activity_history, vec![Some(80.0), None]);
         assert_eq!(render.gpus[0].session_peak_activity, Some(80.0));
     }
@@ -854,7 +860,7 @@ mod tests {
             snapshot_activity(&snapshot),
             &Observation::value(90.0, clock.at(1750).wall)
         );
-        let render = r.render_model(&snapshot);
+        let render = r.render_model(&snapshot, None);
         assert_eq!(
             render.gpus[0].activity_history,
             vec![Some(50.0), None, Some(90.0)]
@@ -1101,7 +1107,7 @@ mod tests {
         );
         r.reset_session_peaks();
         let snapshot = r.assemble(clock.at(100), None);
-        let render = r.render_model(&snapshot);
+        let render = r.render_model(&snapshot, None);
         assert_eq!(render.gpus[0].session_peak_activity, None);
         // Daily peak survives a session reset.
         assert_eq!(

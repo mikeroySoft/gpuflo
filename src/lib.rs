@@ -9,6 +9,7 @@
 mod cli;
 mod config;
 mod model;
+mod monitor;
 mod normalize;
 mod output;
 mod persist;
@@ -19,4 +20,8 @@ pub use model::{
     Health, HealthCategory, InvalidPciBdf, Memory, MemoryPool, Observation, ObservationState,
     Partition, PartitionId, PciBdf, PhysicalGpu, PhysicalGpuId, Power, SCHEMA_VERSION, Snapshot,
     Temperature, Timestamp,
+};
+pub use monitor::{
+    Monitor, MonitorClosed, MonitorCommand, MonitorError, MonitorEvent, MonitorOptions, Notice,
+    ReceiveTimeoutError, ShutdownError, StartError,
 };
