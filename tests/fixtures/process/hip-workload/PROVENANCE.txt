@@ -1,0 +1,5 @@
+Reduced from the live HIP process-attribution capture
+research/process-attribution/results/20260821T181207370038903Z/ (fdinfo
+keys/values and KFD vram_<gpuid>/queues shapes). PID, process name, and
+cgroup are sanitized placeholders; usernames, command lines, serials,
+and host identifiers were never present.

@@ -4,7 +4,9 @@
 //! they never expose file handles, C pointers, or borrowed memory. Expected
 //! failures are data ([`Reading`] states), not control-flow errors.
 
+pub(crate) mod amdsmi;
 pub(crate) mod kernel;
+pub(crate) mod process;
 
 use std::time::Instant;
 
@@ -61,6 +63,18 @@ impl<T> Reading<T> {
             Reading::Malformed => Reading::Malformed,
             Reading::Error => Reading::Error,
         }
+    }
+}
+
+/// Maps an I/O error to reading evidence. amdgpu returns `EPERM` from a
+/// runtime-suspended device ("deny access" without waking it); `EACCES` is
+/// genuine permission denial; a missing node is structural absence.
+pub(crate) fn kernel_error_reading<T>(error: &std::io::Error) -> Reading<T> {
+    match error.raw_os_error() {
+        Some(libc_eperm) if libc_eperm == 1 => Reading::Asleep,
+        Some(libc_eacces) if libc_eacces == 13 => Reading::PermissionDenied,
+        _ if error.kind() == std::io::ErrorKind::NotFound => Reading::Absent,
+        _ => Reading::Error,
     }
 }
 

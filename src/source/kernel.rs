@@ -22,23 +22,11 @@ use crate::state::{DiscoveredGpu, DiscoveredPartition};
 /// Joules per `energy_accumulator` count: 15.259 µJ = 2⁻¹⁶ J.
 const ENERGY_JOULES_PER_COUNT: f64 = 1.0 / 65536.0;
 
-/// Maps an I/O error to reading evidence. amdgpu returns `EPERM` from a
-/// runtime-suspended device ("deny access" without waking it); `EACCES` is
-/// genuine permission denial; a missing node is structural absence.
-fn map_io_error<T>(error: &std::io::Error) -> Reading<T> {
-    match error.raw_os_error() {
-        Some(libc_eperm) if libc_eperm == 1 => Reading::Asleep,
-        Some(libc_eacces) if libc_eacces == 13 => Reading::PermissionDenied,
-        _ if error.kind() == std::io::ErrorKind::NotFound => Reading::Absent,
-        _ => Reading::Error,
-    }
-}
-
 /// Reads a small text node into a trimmed string.
 fn read_text(path: &Path) -> Reading<String> {
     match std::fs::read_to_string(path) {
         Ok(text) => Reading::Value(text.trim().to_owned()),
-        Err(error) => map_io_error(&error),
+        Err(error) => super::kernel_error_reading(&error),
     }
 }
 
@@ -416,23 +404,22 @@ impl KernelSource {
         let read_mono = Instant::now();
         let blob = self.read_blob(device);
 
-        let (mut hotspot, mut power, mut energy) = (Reading::Absent, Reading::Absent, None);
-        let (mut blob_activity, mut blob_umc) = (Reading::Absent, Reading::Absent);
-        match &blob {
-            BlobRead::Parsed(parsed) => {
-                hotspot = parsed.hotspot_millic;
-                power = parsed.socket_power_microwatts;
-                energy = parsed.energy;
-                blob_activity = parsed.activity_centipercent;
-                blob_umc = parsed.umc_centipercent;
-            }
-            BlobRead::Unavailable(state) => {
-                hotspot = state.map(|_| 0);
-                power = state.map(|_| 0);
-                blob_activity = state.map(|_| 0);
-                blob_umc = state.map(|_| 0);
-            }
-        }
+        let (hotspot, power, energy, blob_activity, blob_umc) = match &blob {
+            BlobRead::Parsed(parsed) => (
+                parsed.hotspot_millic,
+                parsed.socket_power_microwatts,
+                parsed.energy,
+                parsed.activity_centipercent,
+                parsed.umc_centipercent,
+            ),
+            BlobRead::Unavailable(state) => (
+                state.map(|_| 0),
+                state.map(|_| 0),
+                None,
+                state.map(|_| 0),
+                state.map(|_| 0),
+            ),
+        };
 
         // Stable text/hwmon nodes provide independent kernel observations
         // wherever the blob lacks a usable field.
@@ -547,7 +534,7 @@ impl KernelSource {
                 }
                 Err(BlobError::Truncated) => BlobRead::Unavailable(Reading::Malformed),
             },
-            Err(error) => BlobRead::Unavailable(map_io_error(&error)),
+            Err(error) => BlobRead::Unavailable(super::kernel_error_reading(&error)),
         }
     }
 
@@ -1064,11 +1051,20 @@ mod tests {
     #[test]
     fn io_error_mapping_distinguishes_asleep_and_permission() {
         let eperm = std::io::Error::from_raw_os_error(1);
-        assert_eq!(map_io_error::<u64>(&eperm), Reading::Asleep);
+        assert_eq!(
+            crate::source::kernel_error_reading::<u64>(&eperm),
+            Reading::Asleep
+        );
         let eacces = std::io::Error::from_raw_os_error(13);
-        assert_eq!(map_io_error::<u64>(&eacces), Reading::PermissionDenied);
+        assert_eq!(
+            crate::source::kernel_error_reading::<u64>(&eacces),
+            Reading::PermissionDenied
+        );
         let missing = std::io::Error::new(std::io::ErrorKind::NotFound, "gone");
-        assert_eq!(map_io_error::<u64>(&missing), Reading::Absent);
+        assert_eq!(
+            crate::source::kernel_error_reading::<u64>(&missing),
+            Reading::Absent
+        );
     }
 
     #[test]

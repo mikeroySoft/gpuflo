@@ -1,0 +1,4 @@
+Synthesized boundary fixtures: duplicated DRM client fds, two-GPU
+association, KFD-only membership, malformed KiB unit, docker cgroup
+identity, and a missing comm. Shapes follow the live capture and
+docs.kernel.org drm-usage-stats; all identifiers fabricated.

@@ -1,0 +1,10 @@
+pos:	0
+flags:	02100002
+mnt_id:	24
+ino:	1210
+drm-driver:	amdgpu
+drm-client-id:	31
+drm-pdev:	0000:03:00.0
+drm-resident-vram:	abc KiB
+drm-resident-gtt:	0 KiB
+drm-resident-cpu:	0
