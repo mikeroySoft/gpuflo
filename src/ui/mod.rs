@@ -23,6 +23,7 @@ use std::time::{Duration, Instant};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
+use ratatui::layout::Rect;
 
 use crate::cli::GpuSelector;
 use crate::config::{ModePreference, PresentationOptions, Theme};
@@ -103,7 +104,8 @@ pub(crate) fn run(
         }
         match event::read()? {
             Event::Key(key) if key.kind == KeyEventKind::Press => {
-                match state.handle_key(key.code) {
+                let area = terminal.size()?;
+                match state.handle_key_in_area(key.code, area.into()) {
                     Action::Quit => return Ok(UiOutcome::Quit),
                     Action::SetProcessScope(scope) => {
                         let _ = monitor.command(MonitorCommand::SetProcessScope(scope));
@@ -257,7 +259,12 @@ impl UiState {
         }
     }
 
+    #[cfg(test)]
     fn handle_key(&mut self, code: KeyCode) -> Action {
+        self.handle_key_in_area(code, Rect::new(0, 0, 120, 40))
+    }
+
+    fn handle_key_in_area(&mut self, code: KeyCode, area: Rect) -> Action {
         match code {
             KeyCode::Char('q') => Action::Quit,
             KeyCode::Esc => {
@@ -281,7 +288,12 @@ impl UiState {
                 Action::None
             }
             KeyCode::Char('m') => {
-                self.mode_preference = self.mode_preference.next();
+                self.mode_preference = match layout::effective(self.mode_preference, area) {
+                    layout::Surface::Mode => ModePreference::Compact,
+                    layout::Surface::Compact => ModePreference::Mini,
+                    layout::Surface::Mini => ModePreference::Tiny,
+                    layout::Surface::Tiny => ModePreference::Mode,
+                };
                 Action::None
             }
             KeyCode::Char('p') => {

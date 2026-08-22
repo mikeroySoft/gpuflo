@@ -150,17 +150,6 @@ impl ModePreference {
             Self::Tiny => "tiny",
         }
     }
-
-    /// Cycles to the next preference (session `m` key).
-    pub fn next(self) -> Self {
-        match self {
-            Self::Auto => Self::Mode,
-            Self::Mode => Self::Compact,
-            Self::Compact => Self::Mini,
-            Self::Mini => Self::Tiny,
-            Self::Tiny => Self::Auto,
-        }
-    }
 }
 
 impl TryFrom<String> for ModePreference {

@@ -197,7 +197,11 @@ fn render_tiny(frame: &mut Frame<'_>, view: &View<'_>, area: Rect) {
     let palette = styler.palette;
     let gpu = view.gpu;
     let sampled_at = view.model.snapshot.sampled_at;
-    let label = format!("{} · {}", compact_name(&gpu.name), gpu.index);
+    let label = if view.model.snapshot.gpus.len() > 1 {
+        format!("{} · {}", compact_name(&gpu.name), gpu.index)
+    } else {
+        compact_name(&gpu.name)
+    };
 
     let mut spans = vec![
         Span::styled("gruflo", styler.bold(palette.fg)),
@@ -300,7 +304,6 @@ fn render_header(frame: &mut Frame<'_>, view: &View<'_>, area: Rect) {
         ),
         Span::raw("  "),
         Span::styled("gruflo", styler.bold(palette.fg)),
-        Span::styled("  ᦬", styler.fg(palette.muted)),
     ]);
     frame.render_widget(Paragraph::new(line).alignment(Alignment::Center), area);
 }
@@ -327,10 +330,14 @@ fn render_strip(frame: &mut Frame<'_>, view: &View<'_>, area: Rect) {
                 ""
             };
             let space = if index == selected { " " } else { "" };
+            let index_suffix = if gpus.len() > 1 {
+                format!(" · {}", gpu.index)
+            } else {
+                String::new()
+            };
             format!(
-                " {marker}{space}{} · {} {} ",
+                " {marker}{space}{}{index_suffix} {} ",
                 short_name(&gpu.name),
-                gpu.index,
                 strip_value(gpu)
             )
         })
@@ -630,6 +637,11 @@ fn render_health(frame: &mut Frame<'_>, view: &View<'_>, area: Rect) {
     let styler = &view.styler;
     let palette = styler.palette;
     let health = &view.gpu.health;
+    if health.category.as_str() == "throttle"
+        && health.message.to_ascii_lowercase().contains("thermal")
+    {
+        return;
+    }
     let (marker, color) = match health.category.as_str() {
         "fault" | "throttle" | "limit" => ("!", palette.fault),
         "telemetry" => ("○", palette.dim),
@@ -754,7 +766,10 @@ fn render_processes(frame: &mut Frame<'_>, view: &View<'_>, area: Rect) {
     }
     if let Some(overlay) = &view.model.processes {
         let mut limitations = Vec::new();
-        if !matches!(overlay.fdinfo_status, Reading::Value(())) {
+        if !matches!(
+            overlay.fdinfo_status,
+            Reading::Value(()) | Reading::PermissionDenied
+        ) {
             limitations.push(format!(
                 "fdinfo {}",
                 format::reading_phrase(&overlay.fdinfo_status)
@@ -879,12 +894,12 @@ fn render_detail(frame: &mut Frame<'_>, view: &View<'_>, area: Rect) {
     let sampled_at = view.model.snapshot.sampled_at;
     let mut lines = Vec::new();
 
-    lines.push(detail_line(
-        styler,
-        "gpu",
-        format!("{} · GPU {}", gpu.name, gpu.index),
-        false,
-    ));
+    let gpu_label = if view.model.snapshot.gpus.len() > 1 {
+        format!("{} · {}", gpu.name, gpu.index)
+    } else {
+        gpu.name.clone()
+    };
+    lines.push(detail_line(styler, "gpu", gpu_label, false));
     lines.push(detail_line(styler, "id", gpu.id.to_string(), false));
     lines.push(detail_line(styler, "bdf", gpu.bdf.to_string(), false));
     if let Some(uuid) = &gpu.uuid {
@@ -893,6 +908,12 @@ fn render_detail(frame: &mut Frame<'_>, view: &View<'_>, area: Rect) {
     if let Some(serial) = &gpu.serial {
         lines.push(detail_line(styler, "serial", serial.clone(), false));
     }
+    lines.push(detail_line(
+        styler,
+        "health",
+        gpu.health.message.clone(),
+        false,
+    ));
     lines.push(Line::raw(""));
 
     let push_f64 = |lines: &mut Vec<Line<'static>>,

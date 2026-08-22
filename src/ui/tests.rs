@@ -485,8 +485,13 @@ fn keys_cycle_session_presentation_and_quit() {
     let mut state = state_with_model(true);
     assert_eq!(state.handle_key(KeyCode::Char('t')), Action::None);
     assert_eq!(state.theme, Theme::Nord);
+    let before = layout::effective(state.mode_preference, Rect::new(0, 0, 120, 40));
     assert_eq!(state.handle_key(KeyCode::Char('m')), Action::None);
-    assert_eq!(state.mode_preference, ModePreference::Mode);
+    assert_eq!(state.mode_preference, ModePreference::Compact);
+    assert_ne!(
+        before,
+        layout::effective(state.mode_preference, Rect::new(0, 0, 120, 40))
+    );
     assert_eq!(state.handle_key(KeyCode::Char('q')), Action::Quit);
     assert_eq!(state.handle_key(KeyCode::Esc), Action::Quit);
 }
@@ -542,16 +547,16 @@ fn process_overlay_lists_honest_attribution() {
     let partition_by_bdf = HashMap::from([(bdf.clone(), PartitionId::new("gpu-a-p0"))]);
     with_processes.processes = Some(ProcessOverlay {
         scanned_at: sampled_at(),
-        fdinfo_status: Reading::Value(()),
+        fdinfo_status: Reading::PermissionDenied,
         kfd_status: Reading::Value(()),
         rows: vec![
             ProcessRow {
                 pid: 4242,
                 name: Reading::Value("llama-server".to_owned()),
                 bdf: Some(bdf),
-                fdinfo_vram_bytes: Reading::Value(1_610_612_736), // 1.5 GiB
+                fdinfo_vram_bytes: Reading::Value(1_610_612_736),
                 fdinfo_gtt_bytes: Reading::Absent,
-                kfd_vram_bytes: Reading::Value(1_073_741_824), // 1.0 GiB
+                kfd_vram_bytes: Reading::Value(1_073_741_824),
                 container: Some("deadbeefcafe".to_owned()),
             },
             ProcessRow {
@@ -571,22 +576,47 @@ fn process_overlay_lists_honest_attribution() {
     let text = buffer_text(&render(&state, 120, 40));
     assert!(text.contains("4242"));
     assert!(text.contains("llama-server"));
-    assert!(
-        text.contains("GPU 0/XCP 0"),
-        "resolved physical/XCP association missing"
-    );
-    assert!(text.contains("1.5 GiB"), "fdinfo VRAM missing");
-    assert!(
-        text.contains("KFD") && text.contains("1.0 GiB"),
-        "KFD memory missing"
-    );
-    assert!(text.contains("unknown"), "unresolved association missing");
-    assert!(
-        text.contains("permission denied"),
-        "privilege limitation must be shown, not hidden"
-    );
+    assert!(text.contains("GPU 0/XCP 0"));
+    assert!(text.contains("1.5 GiB"));
+    assert!(text.contains("KFD") && text.contains("1.0 GiB"));
+    assert!(text.contains("unknown"));
+    assert!(text.contains("permission denied"));
+    assert!(!text.contains("fdinfo permission denied"));
     assert!(text.contains("deadbeefcafe"));
     assert!(!text.contains("attributed memory only"));
+}
+
+#[test]
+fn single_gpu_labels_omit_index_suffix() {
+    let mut state = UiState::new(PresentationOptions::default(), None);
+    let mut one = model();
+    one.snapshot.gpus.truncate(1);
+    one.gpus.truncate(1);
+    let _ = state.adopt_model(one);
+    let text = buffer_text(&render(&state, 120, 40));
+    assert!(text.contains("AMD Instinct MI300X"));
+    assert!(!text.contains("AMD Instinct MI300X · 0"));
+}
+
+#[test]
+fn thermal_throttle_is_detail_only() {
+    let mut state = state_with_model(true);
+    let mut thermal = model();
+    thermal.snapshot.gpus[0].health.category = HealthCategory::THROTTLE;
+    thermal.snapshot.gpus[0].health.message = "thermal throttle active".to_owned();
+    let _ = state.adopt_model(thermal);
+    let main = buffer_text(&render(&state, 120, 40));
+    assert!(!main.contains("thermal throttle active"));
+    state.show_detail = true;
+    let detail = buffer_text(&render(&state, 120, 40));
+    assert!(detail.contains("thermal throttle active"));
+}
+
+#[test]
+fn compact_header_uses_only_supported_glyphs() {
+    let state = state_with_model(true);
+    let text = buffer_text(&render(&state, 80, 24));
+    assert!(!text.contains('᦬'));
 }
 
 #[test]
