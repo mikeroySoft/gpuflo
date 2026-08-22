@@ -393,7 +393,7 @@ mod tests {
         let dir = loop {
             let id = TEMP_ID.fetch_add(1, Ordering::Relaxed);
             let path =
-                std::env::temp_dir().join(format!("gruflo-amdsmi-{}-{id}", std::process::id()));
+                std::env::temp_dir().join(format!("gpuflo-amdsmi-{}-{id}", std::process::id()));
             match std::fs::DirBuilder::new().mode(0o700).create(&path) {
                 Ok(()) => break path,
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
@@ -488,7 +488,7 @@ uint32_t amdsmi_get_gpu_vram_usage(void *handle, vram_t *vram) {
     #[test]
     fn missing_required_symbol_disables_enrichment() {
         let source = GOOD_LIBRARY.replace("amdsmi_get_gpu_vram_usage", "amdsmi_renamed_away");
-        let path = build_fake("gruflo_fake_nosym", &source);
+        let path = build_fake("gpuflo_fake_nosym", &source);
         let result = AmdSmi::load_from(&[path.to_str().unwrap()]);
         assert_eq!(
             result.err(),
@@ -501,7 +501,7 @@ uint32_t amdsmi_get_gpu_vram_usage(void *handle, vram_t *vram) {
     #[test]
     fn unknown_version_disables_enrichment_and_balances_shutdown() {
         let source = GOOD_LIBRARY.replace("v->year = 25", "v->year = 99");
-        let path = build_fake("gruflo_fake_badver", &source);
+        let path = build_fake("gpuflo_fake_badver", &source);
         let result = AmdSmi::load_from(&[path.to_str().unwrap()]);
         assert_eq!(
             result.err(),
@@ -516,14 +516,14 @@ uint32_t amdsmi_get_gpu_vram_usage(void *handle, vram_t *vram) {
             "if (handles == NULL) { *count = 0xFFFFFFFF; return 0; }",
             1,
         );
-        let path = build_fake("gruflo_fake_huge_count", &source);
+        let path = build_fake("gpuflo_fake_huge_count", &source);
         let result = AmdSmi::load_from(&[path.to_str().unwrap()]);
         assert_eq!(result.err(), Some(AmdSmiUnavailable::EnumerationFailed(42)));
     }
 
     #[test]
     fn good_library_initializes_once_and_returns_owned_samples() {
-        let path = build_fake("gruflo_fake_good", GOOD_LIBRARY);
+        let path = build_fake("gpuflo_fake_good", GOOD_LIBRARY);
         let smi = AmdSmi::load_from(&[path.to_str().unwrap()]).unwrap();
         let samples = smi.sample();
         assert_eq!(samples.len(), 1);

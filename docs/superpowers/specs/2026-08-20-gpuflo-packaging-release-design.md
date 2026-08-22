@@ -1,17 +1,17 @@
-# Gruflo Packaging and Release Channel Design
+# Gpuflo Packaging and Release Channel Design
 
 **Status:** Approved in grilling on 2026-08-20
 
 ## Purpose
 
-Gruflo ships as one small local Linux program and one narrow reusable Rust library. Packaging must preserve that shape rather than create installers, services, feature matrices, or platform promises that the product does not need.
+Gpuflo ships as one small local Linux program and one narrow reusable Rust library. Packaging must preserve that shape rather than create installers, services, feature matrices, or platform promises that the product does not need.
 
 The initial release uses two channels only:
 
 1. a prebuilt binary archive attached to a GitHub Release; and
 2. the same Cargo package published to crates.io.
 
-The GitHub archive serves users who want one binary without a Rust toolchain. crates.io supports both `cargo install gruflo` and consumers of the semver-supported canonical model and `Monitor` interface.
+The GitHub archive serves users who want one binary without a Rust toolchain. crates.io supports both `cargo install gpuflo` and consumers of the semver-supported canonical model and `Monitor` interface.
 
 ## Version identity
 
@@ -21,7 +21,7 @@ For version `X.Y.Z`:
 
 - the immutable source tag is `vX.Y.Z`;
 - `Cargo.toml` declares `X.Y.Z`;
-- `gruflo --version` reports `X.Y.Z`;
+- `gpuflo --version` reports `X.Y.Z`;
 - crates.io publishes `X.Y.Z`;
 - the GitHub Release is `vX.Y.Z`;
 - archive names contain `vX.Y.Z`; and
@@ -42,13 +42,13 @@ x86_64-unknown-linux-gnu
 Its archive is:
 
 ```text
-gruflo-vX.Y.Z-x86_64-unknown-linux-gnu.tar.gz
+gpuflo-vX.Y.Z-x86_64-unknown-linux-gnu.tar.gz
 ```
 
 The archive root contains exactly the useful distributable files:
 
 ```text
-gruflo
+gpuflo
 LICENSE
 THIRD_PARTY_NOTICES.txt
 README.md
@@ -70,10 +70,10 @@ The implementation records the oldest glibc baseline actually supported by the r
 
 ## crates.io publication
 
-The repository remains one Cargo package named `gruflo` with library and binary targets. The published crate contains the source and metadata required for:
+The repository remains one Cargo package named `gpuflo` with library and binary targets. The published crate contains the source and metadata required for:
 
 ```text
-cargo install gruflo
+cargo install gpuflo
 ```
 
 and for Rust dependency reuse of the supported library interface.
@@ -133,15 +133,15 @@ The notices are generated from the locked Cargo dependency graph during release 
 
 Copied or closely translated flow and rocm-cli implementations retain auditable per-file provenance and the exact upstream copyright/license notices approved by the reuse decision. The notices identify the upstream URL and pinned revision. Inspiration or general design ideas do not receive false copied-code claims.
 
-The release does not use AMD, ROCm, flow, btop, or another upstream project as gruflo branding, and it makes no trademark claim based on an open-source license.
+The release does not use AMD, ROCm, flow, btop, or another upstream project as gpuflo branding, and it makes no trademark claim based on an open-source license.
 
 ## Documentation artifacts
 
 The initial release documentation surface is deliberately small:
 
 - `README.md` covers installation from the archive and crates.io, runtime prerequisites, first invocation, output modes, optional enrichment, and uninstallation;
-- `gruflo --help` is the authoritative CLI reference; and
-- `gruflo --version` provides release identity.
+- `gpuflo --help` is the authoritative CLI reference; and
+- `gpuflo --version` provides release identity.
 
 The first release does not generate manual pages or Bash/Zsh/Fish completions. The fixed CLI is small enough that those artifacts would add more release machinery than user value. They may be added after the flag surface stabilizes and demonstrated demand exists.
 
@@ -168,7 +168,7 @@ If either channel fails after the immutable crate version is published, fix the 
 
 No distro package is maintained initially: no `.deb`, `.rpm`, PPA, COPR, AUR package, Homebrew formula, Nix package, Flatpak, Snap, AppImage, or container image.
 
-Third-party distro maintainers may package gruflo from tagged source under its license. An official distro channel is added only when there is a maintainer, a tested target, and a clear user need. It must consume the same package and must not introduce a daemon, mandatory ROCm dependency, permission mutation, or alternate product behavior.
+Third-party distro maintainers may package gpuflo from tagged source under its license. An official distro channel is added only when there is a maintainer, a tested target, and a clear user need. It must consume the same package and must not introduce a daemon, mandatory ROCm dependency, permission mutation, or alternate product behavior.
 
 ## Explicit non-goals
 
@@ -204,8 +204,8 @@ The packaging decision is satisfied when:
 
 ## Evidence
 
-- [Choose the minimal Rust architecture](./2026-08-20-gruflo-rust-architecture-design.md)
-- [Define the validation and release contract](./2026-08-20-gruflo-validation-release-design.md)
-- [Identify the reusable code boundary](https://github.com/michaelroy-amd/gruflo/issues/2)
-- [Reuse boundary research](https://github.com/michaelroy-amd/gruflo/blob/research/reuse-boundary/research/reuse-boundary.md)
-- [Define capability, failure, and permission behavior](./2026-08-20-gruflo-capability-failure-design.md)
+- [Choose the minimal Rust architecture](./2026-08-20-gpuflo-rust-architecture-design.md)
+- [Define the validation and release contract](./2026-08-20-gpuflo-validation-release-design.md)
+- [Identify the reusable code boundary](https://github.com/mikeroysoft/gpuflo/issues/2)
+- [Reuse boundary research](https://github.com/mikeroysoft/gpuflo/blob/research/reuse-boundary/research/reuse-boundary.md)
+- [Define capability, failure, and permission behavior](./2026-08-20-gpuflo-capability-failure-design.md)

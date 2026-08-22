@@ -24,7 +24,7 @@ struct Pty {
 /// Copies the committed fixture into a mutable per-test host root.
 fn fixture_root(tag: &str) -> PathBuf {
     let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/kernel/discrete-spx");
-    let root = std::env::temp_dir().join(format!("gruflo-pty-{tag}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("gpuflo-pty-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     copy_tree(&source, &root);
     root
@@ -42,8 +42,8 @@ fn copy_tree(from: &Path, to: &Path) {
     }
 }
 
-/// Spawns the actual debug gruflo binary on a fresh PTY.
-fn spawn_gruflo(tag: &str, extra_env: &[(&str, &str)]) -> Pty {
+/// Spawns the actual debug gpuflo binary on a fresh PTY.
+fn spawn_gpuflo(tag: &str, extra_env: &[(&str, &str)]) -> Pty {
     let root = fixture_root(tag);
 
     // SAFETY: openpty fills two fresh descriptors on success.
@@ -68,9 +68,9 @@ fn spawn_gruflo(tag: &str, extra_env: &[(&str, &str)]) -> Pty {
     };
 
     let slave_fd = slave.as_raw_fd();
-    let mut command = Command::new(env!("CARGO_BIN_EXE_gruflo"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_gpuflo"));
     command
-        .env("GRUFLO_HOST_ROOT", &root)
+        .env("GPUFLO_HOST_ROOT", &root)
         .env("TERM", "xterm-256color")
         .env_remove("NO_COLOR")
         .stdin(unsafe { Stdio::from_raw_fd(libc::dup(slave_fd)) })
@@ -92,7 +92,7 @@ fn spawn_gruflo(tag: &str, extra_env: &[(&str, &str)]) -> Pty {
             Ok(())
         });
     }
-    let child = command.spawn().expect("spawn gruflo on the pty");
+    let child = command.spawn().expect("spawn gpuflo on the pty");
     drop(slave);
     Pty { master, child }
 }
@@ -141,7 +141,7 @@ impl Pty {
             if let Some(status) = self.child.try_wait().expect("wait") {
                 return status;
             }
-            assert!(Instant::now() < deadline, "gruflo did not exit in time");
+            assert!(Instant::now() < deadline, "gpuflo did not exit in time");
             std::thread::sleep(Duration::from_millis(25));
         }
     }
@@ -160,14 +160,14 @@ fn assert_restored(output: &str) {
 
 #[test]
 fn normal_quit_restores_the_terminal() {
-    let mut pty = spawn_gruflo("quit", &[]);
+    let mut pty = spawn_gpuflo("quit", &[]);
     let mut output = String::new();
     pty.read_until(&mut output, ENTER_ALT, Duration::from_secs(5));
     assert!(output.contains(ENTER_ALT), "interactive mode entered");
     // Let the first frames render, then quit normally.
     pty.read_until(
         &mut output,
-        "GRUFLO-NEVER-MATCHES",
+        "GPUFLO-NEVER-MATCHES",
         Duration::from_millis(700),
     );
     pty.write(b"q");
@@ -179,12 +179,12 @@ fn normal_quit_restores_the_terminal() {
 
 #[test]
 fn sigint_restores_the_terminal_and_exits_130() {
-    let mut pty = spawn_gruflo("sigint", &[]);
+    let mut pty = spawn_gpuflo("sigint", &[]);
     let mut output = String::new();
     pty.read_until(&mut output, ENTER_ALT, Duration::from_secs(5));
     pty.read_until(
         &mut output,
-        "GRUFLO-NEVER-MATCHES",
+        "GPUFLO-NEVER-MATCHES",
         Duration::from_millis(700),
     );
     // SAFETY: signaling the child we spawned.
@@ -199,7 +199,7 @@ fn sigint_restores_the_terminal_and_exits_130() {
 
 #[test]
 fn injected_fatal_restores_before_the_diagnostic_and_exits_1() {
-    let mut pty = spawn_gruflo("fatal", &[("GRUFLO_FATAL_AFTER_MS", "600")]);
+    let mut pty = spawn_gpuflo("fatal", &[("GPUFLO_FATAL_AFTER_MS", "600")]);
     let mut output = String::new();
     pty.read_until(&mut output, ENTER_ALT, Duration::from_secs(5));
     let status = pty.wait_exit(Duration::from_secs(5));

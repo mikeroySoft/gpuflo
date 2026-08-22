@@ -1,10 +1,10 @@
-# Gruflo Capability, Failure, and Permission Design
+# Gpuflo Capability, Failure, and Permission Design
 
 **Status:** Approved in grilling on 2026-08-20
 
 ## Purpose
 
-Gruflo must remain useful when hardware, drivers, telemetry sources, permissions, and devices are only partially available. Failure is scoped to the smallest truthful observation or device. Missing telemetry is never numeric zero, optional enrichment never controls core availability, and terminal ownership is always restored before a fatal diagnostic.
+Gpuflo must remain useful when hardware, drivers, telemetry sources, permissions, and devices are only partially available. Failure is scoped to the smallest truthful observation or device. Missing telemetry is never numeric zero, optional enrichment never controls core availability, and terminal ownership is always restored before a fatal diagnostic.
 
 This contract defines product behavior. Exact worker structure, deadlines, cooldown constants, and platform APIs remain for the architecture and validation decisions, subject to the invariants below.
 
@@ -15,15 +15,15 @@ A supported host is:
 - Linux; and
 - a host with at least one AMD PCI/DRM device bound to the `amdgpu` driver.
 
-A base physical-GPU identity is enough to start. Gruflo does not require ROCm userspace, the `amd-smi` executable, the AMD SMI library, `/dev/kfd`, membership in `render` or `video`, or root privileges.
+A base physical-GPU identity is enough to start. Gpuflo does not require ROCm userspace, the `amd-smi` executable, the AMD SMI library, `/dev/kfd`, membership in `render` or `video`, or root privileges.
 
-The host gate runs before raw mode, cursor hiding, or alternate-screen entry. If the host is not Linux or no `amdgpu` GPU is discoverable at startup, gruflo prints one actionable stderr line and exits `1` without taking over the terminal.
+The host gate runs before raw mode, cursor hiding, or alternate-screen entry. If the host is not Linux or no `amdgpu` GPU is discoverable at startup, gpuflo prints one actionable stderr line and exits `1` without taking over the terminal.
 
-If at least one physical GPU is identified, gruflo starts even when every contracted metric is represented by an observation state. That is a valid partial snapshot, not startup failure.
+If at least one physical GPU is identified, gpuflo starts even when every contracted metric is represented by an observation state. That is a valid partial snapshot, not startup failure.
 
 ## Device and capability discovery
 
-Gruflo discovers devices from AMD PCI/DRM entries bound to `amdgpu`, groups processor handles into physical GPUs and XCPs, and then probes each metric source. Hardware model-name lists never define capability.
+Gpuflo discovers devices from AMD PCI/DRM entries bound to `amdgpu`, groups processor handles into physical GPUs and XCPs, and then probes each metric source. Hardware model-name lists never define capability.
 
 The kernel path is authoritative:
 
@@ -75,7 +75,7 @@ Unknown future observation-state strings remain additive under machine schema ve
 
 ## Permission behavior
 
-Permission failure is feature-local. It never hides a GPU, suppresses healthy observations, or recommends running gruflo as root.
+Permission failure is feature-local. It never hides a GPU, suppresses healthy observations, or recommends running gpuflo as root.
 
 - Mode observations remain kernel-backed and usable without supplemental groups.
 - Missing process identity retains the PID/row and reports `permission_denied` at the missing field.
@@ -110,7 +110,7 @@ Optional AMD SMI initialization or sampling failure opens a bounded circuit brea
 
 ## Malformed and changing source data
 
-Gruflo recognizes documented sentinels before numeric validation. It never clamps broken telemetry into a plausible value.
+Gpuflo recognizes documented sentinels before numeric validation. It never clamps broken telemetry into a plausible value.
 
 - An unknown `gpu_metrics` layout or incompatible AMD SMI ABI maps only affected observations to `unsupported_driver_version`.
 - A recognized layout that is truncated, malformed, wrong-width, non-finite, impossibly negative, or invalid for that metric maps only affected observations to `source_error`.
@@ -147,17 +147,17 @@ Failure is isolated at metric, source, and physical-GPU scope:
 - one failed physical GPU never suppresses healthy GPUs; and
 - exports remain successful while at least the started session can produce its contracted snapshot stream.
 
-The affected physical GPU's health sentence reports telemetry trouble only when a contracted mode observation or source-backed health signal is unavailable or stale. Optional fan, detail, process, `/dev/kfd`, or enrichment failures stay local to those surfaces. Gruflo never creates a node-wide health score.
+The affected physical GPU's health sentence reports telemetry trouble only when a contracted mode observation or source-backed health signal is unavailable or stale. Optional fan, detail, process, `/dev/kfd`, or enrichment failures stay local to those surfaces. Gpuflo never creates a node-wide health score.
 
 ## Partition configuration changes
 
-An accelerator/memory partition-mode change invalidates XCP handles and identity assumptions. Gruflo does not join old and new XCPs by display index and does not attempt a live subtree migration in the initial design.
+An accelerator/memory partition-mode change invalidates XCP handles and identity assumptions. Gpuflo does not join old and new XCPs by display index and does not attempt a live subtree migration in the initial design.
 
-After confirming a partition configuration change, gruflo:
+After confirming a partition configuration change, gpuflo:
 
 1. stops output;
 2. restores terminal state;
-3. prints `GPU partition configuration changed; restart gruflo` to stderr; and
+3. prints `GPU partition configuration changed; restart gpuflo` to stderr; and
 4. exits `1`.
 
 A fresh process re-enumerates the physical GPU and builds the new XCP topology from scratch.
@@ -207,10 +207,10 @@ The contract is satisfied when:
 
 ## Evidence
 
-- [Inventory AMD telemetry sources and support](https://github.com/michaelroy-amd/gruflo/issues/8)
-- [AMD telemetry source research](https://github.com/michaelroy-amd/gruflo/blob/research/amd-telemetry-sources/research/amd-telemetry-sources.md)
-- [Define the metric and health contract](https://github.com/michaelroy-amd/gruflo/issues/5)
-- [Set sampling, smoothing, and history semantics](https://github.com/michaelroy-amd/gruflo/issues/3)
-- [Set the process overlay contract](https://github.com/michaelroy-amd/gruflo/issues/4)
-- [Define the machine-readable output contract](https://github.com/michaelroy-amd/gruflo/issues/11)
-- [Prototype the responsive dashboard language](https://github.com/michaelroy-amd/gruflo/issues/7)
+- [Inventory AMD telemetry sources and support](https://github.com/mikeroysoft/gpuflo/issues/8)
+- [AMD telemetry source research](https://github.com/mikeroysoft/gpuflo/blob/research/amd-telemetry-sources/research/amd-telemetry-sources.md)
+- [Define the metric and health contract](https://github.com/mikeroysoft/gpuflo/issues/5)
+- [Set sampling, smoothing, and history semantics](https://github.com/mikeroysoft/gpuflo/issues/3)
+- [Set the process overlay contract](https://github.com/mikeroysoft/gpuflo/issues/4)
+- [Define the machine-readable output contract](https://github.com/mikeroysoft/gpuflo/issues/11)
+- [Prototype the responsive dashboard language](https://github.com/mikeroysoft/gpuflo/issues/7)

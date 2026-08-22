@@ -1,10 +1,10 @@
 [package]
-name = "gruflo"
+name = "gpuflo"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.96"
 description = "Read-only terminal instrument for Linux amdgpu GPUs: activity, memory occupancy, and source-backed health within one second"
-repository = "https://github.com/michaelroy-amd/gruflo"
+repository = "https://github.com/mikeroysoft/gpuflo"
 license = "MIT"
 readme = "README.md"
 keywords = ["amd", "gpu", "amdgpu", "telemetry", "tui"]

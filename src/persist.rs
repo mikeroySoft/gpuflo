@@ -125,7 +125,7 @@ impl PersistLane {
         let thread_slot = Arc::clone(&slot);
         let thread_error = Arc::clone(&error);
         let join = std::thread::Builder::new()
-            .name("gruflo-persist".to_owned())
+            .name("gpuflo-persist".to_owned())
             .spawn(move || {
                 // Wake sender dropping closes the loop; write any final state.
                 while wake_rx.recv().is_ok() {
@@ -218,7 +218,7 @@ mod tests {
         loop {
             let sequence = TEST_SEQUENCE.fetch_add(1, Ordering::Relaxed);
             let root = std::env::temp_dir()
-                .join(format!("gruflo-persist-{}-{sequence}", std::process::id()));
+                .join(format!("gpuflo-persist-{}-{sequence}", std::process::id()));
             match std::fs::DirBuilder::new().mode(0o700).create(&root) {
                 Ok(()) => return root.join(name),
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
@@ -230,7 +230,7 @@ mod tests {
     #[test]
     fn missing_is_absent_and_malformed_is_an_error() {
         assert_eq!(
-            load(Path::new("/nonexistent/gruflo/daily.json")).unwrap(),
+            load(Path::new("/nonexistent/gpuflo/daily.json")).unwrap(),
             None
         );
         let path = temp_path("malformed/daily.json");

@@ -511,7 +511,7 @@ mod tests {
         assert_eq!(sample.rows.len(), 1);
         let row = &sample.rows[0];
         assert_eq!(row.pid, 4242);
-        assert_eq!(row.name, Reading::Value("gruflo-hip".to_owned()));
+        assert_eq!(row.name, Reading::Value("gpuflo-hip".to_owned()));
         assert_eq!(row.bdf.as_ref().map(PciBdf::as_str), Some("0000:03:00.0"));
         // fdinfo: KiB × 1024 exactly, never × 1000.
         assert_eq!(row.fdinfo_vram_bytes, Reading::Value(340_104 * 1024));
@@ -632,7 +632,7 @@ mod tests {
     }
     #[test]
     fn process_names_are_sanitized_before_rendering() {
-        let dir = std::env::temp_dir().join(format!("gruflo-process-name-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("gpuflo-process-name-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("comm"), "safe\u{1b}]0;owned\u{7}\n").unwrap();
         assert_eq!(

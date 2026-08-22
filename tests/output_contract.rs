@@ -1,7 +1,7 @@
 //! Machine-readable output contract: JSON shape of the public [`Snapshot`]
 //! serde types, per the 2026-08-20 machine-readable output design.
 
-use gruflo::{
+use gpuflo::{
     Health, HealthCategory, Memory, MemoryPool, Observation, ObservationState, Partition,
     PartitionId, PciBdf, PhysicalGpu, PhysicalGpuId, Power, SCHEMA_VERSION, Snapshot, Temperature,
     Timestamp,
@@ -141,7 +141,7 @@ fn envelope_has_schema_version_1_and_rfc3339_utc_sampled_at() {
     let json = to_json(None);
     assert_eq!(json["schema_version"], serde_json::json!(SCHEMA_VERSION));
     assert_eq!(json["schema_version"], serde_json::json!(1));
-    assert!(json["gruflo_version"].is_string());
+    assert!(json["gpuflo_version"].is_string());
     assert_rfc3339_utc(&json["sampled_at"], "sampled_at");
     assert_eq!(json["gpus"].as_array().unwrap().len(), 2);
 }

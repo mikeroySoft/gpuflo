@@ -1,17 +1,17 @@
-# Gruflo Minimal Rust Architecture Design
+# Gpuflo Minimal Rust Architecture Design
 
 **Status:** Approved in grilling on 2026-08-20
 
 ## Purpose
 
-Gruflo is one small, standalone Linux binary. Its architecture must isolate blocking and optional telemetry, preserve one canonical metric model across the TUI and machine outputs, keep visual animation separate from observations, and provide a narrow Rust reuse seam without importing rocm-cli's daemon/application structure.
+Gpuflo is one small, standalone Linux binary. Its architecture must isolate blocking and optional telemetry, preserve one canonical metric model across the TUI and machine outputs, keep visual animation separate from observations, and provide a narrow Rust reuse seam without importing rocm-cli's daemon/application structure.
 
 The selected design is a **deep single-package monitor**: one Cargo package with a library and binary target, private source-specific adapters, bounded worker lanes, a coordinator-owned pure reducer, and a semver-supported canonical model plus monitor interface.
 
 ## Architectural invariants
 
 - One Cargo package; no workspace and no daemon/API/IPC crate.
-- One shipped `gruflo` binary.
+- One shipped `gpuflo` binary.
 - Kernel telemetry is authoritative; AMD SMI is optional enrichment.
 - No source or output surface mutates shared product state.
 - One coordinator owns runtime state and sequences scheduling, normalization, reduction, publication, and lifecycle; the named modules own their rules.
@@ -23,7 +23,7 @@ The selected design is a **deep single-package monitor**: one Cargo package with
 
 ## Package shape
 
-The repository contains one Cargo package named `gruflo`:
+The repository contains one Cargo package named `gpuflo`:
 
 ```text
 Cargo.toml
@@ -373,25 +373,25 @@ Partition topology is not live-migrated. Confirmation stops production with a fa
 Configuration path:
 
 ```text
-$XDG_CONFIG_HOME/gruflo/config.toml
+$XDG_CONFIG_HOME/gpuflo/config.toml
 ```
 
 fallback:
 
 ```text
-~/.config/gruflo/config.toml
+~/.config/gpuflo/config.toml
 ```
 
 Daily summary path:
 
 ```text
-$XDG_STATE_HOME/gruflo/daily.json
+$XDG_STATE_HOME/gpuflo/daily.json
 ```
 
 fallback:
 
 ```text
-~/.local/state/gruflo/daily.json
+~/.local/state/gpuflo/daily.json
 ```
 
 Missing/blank config means built-in defaults. The separate configuration decision owns malformed-file behavior and the later configurable-key set. Sampling cadences, queue capacities, schema meanings, and source precedence are not generic tuning knobs.
@@ -482,11 +482,11 @@ The validation/release decision sets the mandatory matrix, budgets, and release 
 
 ## Reuse contract
 
-Another Rust project, including rocm-cli, can embed the monitor without taking gruflo's TUI, CLI, or terminal lifecycle. Daily-summary persistence is opt-in through `MonitorOptions`; disabling it does not change collection or canonical snapshot semantics. The caller learns one canonical model and one monitor interface.
+Another Rust project, including rocm-cli, can embed the monitor without taking gpuflo's TUI, CLI, or terminal lifecycle. Daily-summary persistence is opt-in through `MonitorOptions`; disabling it does not change collection or canonical snapshot semantics. The caller learns one canonical model and one monitor interface.
 
 The public interface is semver-supported from the initial package release. Private modules may be refactored freely. Packaging later decides publication/distribution channel; it must not split the package or widen the supported interface merely to publish it.
 
-Copied or closely translated upstream implementations retain the already-approved provenance headers and notices. Reuse of gruflo by rocm-cli is dependency reuse, not a reason to import rocm-cli's daemon or application types back into gruflo.
+Copied or closely translated upstream implementations retain the already-approved provenance headers and notices. Reuse of gpuflo by rocm-cli is dependency reuse, not a reason to import rocm-cli's daemon or application types back into gpuflo.
 
 ## Rejected architectures
 
@@ -538,14 +538,14 @@ The architecture is settled when:
 
 ## Evidence
 
-- [Identify the reusable code boundary](https://github.com/michaelroy-amd/gruflo/issues/2)
-- [Reuse boundary research](https://github.com/michaelroy-amd/gruflo/blob/research/reuse-boundary/research/reuse-boundary.md)
-- [Inventory AMD telemetry sources and support](https://github.com/michaelroy-amd/gruflo/issues/8)
-- [AMD telemetry source research](https://github.com/michaelroy-amd/gruflo/blob/research/amd-telemetry-sources/research/amd-telemetry-sources.md)
-- [Define the metric and health contract](https://github.com/michaelroy-amd/gruflo/issues/5)
-- [Set sampling, smoothing, and history semantics](https://github.com/michaelroy-amd/gruflo/issues/3)
-- [Define sparse configuration behavior](https://github.com/michaelroy-amd/gruflo/issues/13)
-- [Prototype the responsive dashboard language](https://github.com/michaelroy-amd/gruflo/issues/7)
-- [Set the process overlay contract](https://github.com/michaelroy-amd/gruflo/issues/4)
-- [Define the machine-readable output contract](https://github.com/michaelroy-amd/gruflo/issues/11)
-- [Define capability, failure, and permission behavior](https://github.com/michaelroy-amd/gruflo/issues/10)
+- [Identify the reusable code boundary](https://github.com/mikeroysoft/gpuflo/issues/2)
+- [Reuse boundary research](https://github.com/mikeroysoft/gpuflo/blob/research/reuse-boundary/research/reuse-boundary.md)
+- [Inventory AMD telemetry sources and support](https://github.com/mikeroysoft/gpuflo/issues/8)
+- [AMD telemetry source research](https://github.com/mikeroysoft/gpuflo/blob/research/amd-telemetry-sources/research/amd-telemetry-sources.md)
+- [Define the metric and health contract](https://github.com/mikeroysoft/gpuflo/issues/5)
+- [Set sampling, smoothing, and history semantics](https://github.com/mikeroysoft/gpuflo/issues/3)
+- [Define sparse configuration behavior](https://github.com/mikeroysoft/gpuflo/issues/13)
+- [Prototype the responsive dashboard language](https://github.com/mikeroysoft/gpuflo/issues/7)
+- [Set the process overlay contract](https://github.com/mikeroysoft/gpuflo/issues/4)
+- [Define the machine-readable output contract](https://github.com/mikeroysoft/gpuflo/issues/11)
+- [Define capability, failure, and permission behavior](https://github.com/mikeroysoft/gpuflo/issues/10)

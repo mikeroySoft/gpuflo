@@ -1,8 +1,8 @@
-# Gruflo Production Implementation Plan
+# Gpuflo Production Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the complete local, read-only gruflo Rust library and binary from the approved Wayfinder specifications, with truthful kernel-first AMD GPU telemetry, bounded monitoring, canonical outputs, safe terminal lifecycle, responsive Ratatui UI, and release-ready artifacts.
+**Goal:** Build the complete local, read-only gpuflo Rust library and binary from the approved Wayfinder specifications, with truthful kernel-first AMD GPU telemetry, bounded monitoring, canonical outputs, safe terminal lifecycle, responsive Ratatui UI, and release-ready artifacts.
 
 **Architecture:** One Cargo package exposes only canonical model types and the narrow `Monitor` API. Private kernel, optional runtime AMD SMI, process, reducer, persistence, output, terminal, and UI modules feed one coordinator-owned state machine through capacity-one lanes; render animation remains presentation-only. The binary performs configuration and host preflight before terminal takeover, then selects one-shot, streaming, or interactive presentation over the same snapshots.
 
@@ -14,7 +14,7 @@
 
 - Base commit: `c7612004902ffb5a4f7d66672f9385f08c8f419b` on `origin/main`.
 - Worktree: the existing linked worktree, repurposed onto `feature/production-implementation`; do not create a nested worktree.
-- Package: one publishable package named `gruflo`, version `0.1.0`, edition 2024, library plus one `gruflo` binary, no Cargo features and no workspace.
+- Package: one publishable package named `gpuflo`, version `0.1.0`, edition 2024, library plus one `gpuflo` binary, no Cargo features and no workspace.
 - Public API: re-export canonical model vocabulary and `Monitor`, `MonitorOptions`, `MonitorEvent`, `MonitorCommand`, and typed lifecycle errors only.
 - Kernel source: discover `card*` DRM devices whose PCI vendor is `0x1002` and driver is `amdgpu`; use textual device sysfs/hwmon for broadly stable metrics and inspect the four-byte versioned `gpu_metrics` header before parsing supported layouts. Unknown layout means `unsupported_driver_version`, never a guessed struct.
 - Implemented `gpu_metrics` families: fixed v1.3, fixed v1.4-v1.8 common hero fields, APU v2.1-v2.4, and APU v3.0. Dynamic v1.9 is detected and explicitly represented as `unsupported_driver_version` until a pointer-free kernel payload contract is verified; stable text nodes continue to provide independent kernel observations.
@@ -111,7 +111,7 @@ pub enum Observation<T> {
 
 pub struct Snapshot {
     pub schema_version: u32,
-    pub gruflo_version: String,
+    pub gpuflo_version: String,
     pub sampled_at: Timestamp,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sequence: Option<u64>,
@@ -141,7 +141,7 @@ Expected: FAIL because parsers are not implemented.
 
 Use `lexopt`; accepted options are exactly `--help`, `--version`, `--once`, `--json`, `--json-stream`, `--tiny`, `--gpu`, `--theme`, `--mode`, and `--no-color`. Implement a closed `#[serde(deny_unknown_fields)]` sparse TOML with only `theme`, `mode`, and `no_color`. Resolve paths from an explicit environment-value struct; missing/blank config is valid; malformed, wrong-type, and unknown-key files are startup errors with path context. Split resolved options once into monitor and presentation options.
 
-`src/main.rs` calls one `gruflo::run_from_env()` entrypoint and maps its returned outcome to exit 0/1/2/130.
+`src/main.rs` calls one `gpuflo::run_from_env()` entrypoint and maps its returned outcome to exit 0/1/2/130.
 
 - [ ] **Step 6: Verify and commit the foundation**
 
@@ -155,7 +155,7 @@ cargo test --lib config::tests -- --nocapture
 cargo check --all-targets
 ```
 
-Commit: `feat: establish canonical gruflo package`
+Commit: `feat: establish canonical gpuflo package`
 
 ### Task 2: Implement deterministic reducer, history, health, and persistence
 
@@ -405,7 +405,7 @@ cargo run -- --version
 cargo check --all-targets
 ```
 
-Commit: `feat: add canonical gruflo outputs`
+Commit: `feat: add canonical gpuflo outputs`
 
 ### Task 7: Implement terminal safety and responsive Ratatui UI
 
@@ -434,7 +434,7 @@ Acquire only after monitor preflight. Record each completed stage. Restore curso
 
 - [ ] **Step 3: Add failing UI contract tests**
 
-Render canonical fixture snapshots at `120×40`, `80×24`, `60×16`, `40×8`, and `20×1`. Assert each expected surface, the six-row GRUFLO logo and exact tagline in mode, selected-GPU marker, factual health, explicit no-color markers, and no panic/overflow in a bounded sweep around breakpoints. Add direct braille gap/packing and spring finite-input tests.
+Render canonical fixture snapshots at `120×40`, `80×24`, `60×16`, `40×8`, and `20×1`. Assert each expected surface, the six-row GPUFLO logo and exact tagline in mode, selected-GPU marker, factual health, explicit no-color markers, and no panic/overflow in a bounded sweep around breakpoints. Add direct braille gap/packing and spring finite-input tests.
 
 Run: `cargo test --test ui_contract -- --nocapture`
 
@@ -498,7 +498,7 @@ Document archive/crates.io installation, Linux+amdgpu prerequisite, first run, k
 
 - [ ] **Step 4: Add CI and release workflows**
 
-CI runs formatting, current stable build/test/clippy, selected MSRV build/test, and package verification. Tagged release reruns the deterministic gate, builds `x86_64-unknown-linux-gnu`, creates exactly `gruflo`, `LICENSE`, `THIRD_PARTY_NOTICES.txt`, and `README.md` at archive root, writes `SHA256SUMS`, checks `gruflo --version`, and publishes artifacts. It does not publish crates automatically without repository credentials/approval.
+CI runs formatting, current stable build/test/clippy, selected MSRV build/test, and package verification. Tagged release reruns the deterministic gate, builds `x86_64-unknown-linux-gnu`, creates exactly `gpuflo`, `LICENSE`, `THIRD_PARTY_NOTICES.txt`, and `README.md` at archive root, writes `SHA256SUMS`, checks `gpuflo --version`, and publishes artifacts. It does not publish crates automatically without repository credentials/approval.
 
 - [ ] **Step 5: Verify and commit release artifacts**
 
@@ -511,7 +511,7 @@ cargo package --allow-dirty
 cargo run -- --version
 ```
 
-Commit: `docs: prepare gruflo package and release`
+Commit: `docs: prepare gpuflo package and release`
 
 ### Task 9: Run the minimal release gate and actual smoke journeys
 
@@ -545,7 +545,7 @@ Write one concise candidate manifest with version/commit/target/compiler, determ
 
 - [ ] **Step 5: Commit verified corrections and manifest**
 
-Commit: `test: complete gruflo release validation`
+Commit: `test: complete gpuflo release validation`
 
 ### Task 10: Review, repair, push, and open the PR
 

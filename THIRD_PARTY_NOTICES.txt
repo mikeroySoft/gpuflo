@@ -1,6 +1,6 @@
-Third-party notices for gruflo
+Third-party notices for gpuflo
 
-gruflo is distributed under the MIT license (see LICENSE).
+gpuflo is distributed under the MIT license (see LICENSE).
 The x86_64-unknown-linux-gnu binary uses the locked Rust crates below. Their exact
 redistribution notices and license texts are reproduced from each crate.
 

@@ -53,26 +53,26 @@ impl Environment {
                 value.contains("truecolor") || value.contains("24bit") || value.contains("direct")
             })
     }
-    /// `$XDG_CONFIG_HOME/gruflo/config.toml`, falling back to
-    /// `~/.config/gruflo/config.toml`. `None` when neither root resolves.
+    /// `$XDG_CONFIG_HOME/gpuflo/config.toml`, falling back to
+    /// `~/.config/gpuflo/config.toml`. `None` when neither root resolves.
     pub fn config_path(&self) -> Option<PathBuf> {
         if let Some(xdg) = &self.xdg_config_home {
-            return Some(xdg.join("gruflo/config.toml"));
+            return Some(xdg.join("gpuflo/config.toml"));
         }
         self.home
             .as_ref()
-            .map(|home| home.join(".config/gruflo/config.toml"))
+            .map(|home| home.join(".config/gpuflo/config.toml"))
     }
 
-    /// `$XDG_STATE_HOME/gruflo/daily.json`, falling back to
-    /// `~/.local/state/gruflo/daily.json`. `None` disables persistence.
+    /// `$XDG_STATE_HOME/gpuflo/daily.json`, falling back to
+    /// `~/.local/state/gpuflo/daily.json`. `None` disables persistence.
     pub fn summary_path(&self) -> Option<PathBuf> {
         if let Some(xdg) = &self.xdg_state_home {
-            return Some(xdg.join("gruflo/daily.json"));
+            return Some(xdg.join("gpuflo/daily.json"));
         }
         self.home
             .as_ref()
-            .map(|home| home.join(".local/state/gruflo/daily.json"))
+            .map(|home| home.join(".local/state/gpuflo/daily.json"))
     }
 
     /// Whether `NO_COLOR` unconditionally disables color.
@@ -271,8 +271,8 @@ mod tests {
 
     fn temp_config(content: &str) -> (tempdir::TempDir, Environment) {
         let dir = tempdir::TempDir::new();
-        std::fs::create_dir_all(dir.path().join("gruflo")).unwrap();
-        std::fs::write(dir.path().join("gruflo/config.toml"), content).unwrap();
+        std::fs::create_dir_all(dir.path().join("gpuflo")).unwrap();
+        std::fs::write(dir.path().join("gpuflo/config.toml"), content).unwrap();
         let env = Environment {
             xdg_config_home: Some(dir.path().to_owned()),
             ..Environment::default()
@@ -292,7 +292,7 @@ mod tests {
         impl TempDir {
             pub fn new() -> Self {
                 let path = std::env::temp_dir().join(format!(
-                    "gruflo-test-{}-{}",
+                    "gpuflo-test-{}-{}",
                     std::process::id(),
                     COUNTER.fetch_add(1, Ordering::Relaxed)
                 ));
@@ -321,7 +321,7 @@ mod tests {
         };
         assert_eq!(
             env.config_path().unwrap(),
-            PathBuf::from("/xdg/gruflo/config.toml")
+            PathBuf::from("/xdg/gpuflo/config.toml")
         );
         let env = Environment {
             home: Some(PathBuf::from("/home/user")),
@@ -329,18 +329,18 @@ mod tests {
         };
         assert_eq!(
             env.config_path().unwrap(),
-            PathBuf::from("/home/user/.config/gruflo/config.toml")
+            PathBuf::from("/home/user/.config/gpuflo/config.toml")
         );
         assert_eq!(
             env.summary_path().unwrap(),
-            PathBuf::from("/home/user/.local/state/gruflo/daily.json")
+            PathBuf::from("/home/user/.local/state/gpuflo/daily.json")
         );
     }
 
     #[test]
     fn missing_and_blank_files_use_built_in_defaults() {
         let env = Environment {
-            xdg_config_home: Some(PathBuf::from("/nonexistent-gruflo-test")),
+            xdg_config_home: Some(PathBuf::from("/nonexistent-gpuflo-test")),
             ..Environment::default()
         };
         let options = resolve(&env, &cli_defaults()).unwrap();

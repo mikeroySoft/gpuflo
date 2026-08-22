@@ -4,7 +4,7 @@
 
 **Goal:** Add one zero-argument, read-only command that runs a representative ROCm workload and emits sanitized process-attribution evidence.
 
-**Architecture:** A single Bash orchestrator owns prerequisite checks, temporary files, workload selection, source capture, timing, summarization, cleanup, and result publication. It embeds one PyTorch workload and one HIP fallback in its private temporary directory; no production gruflo module or runtime dependency is introduced.
+**Architecture:** A single Bash orchestrator owns prerequisite checks, temporary files, workload selection, source capture, timing, summarization, cleanup, and result publication. It embeds one PyTorch workload and one HIP fallback in its private temporary directory; no production gpuflo module or runtime dependency is introduced.
 
 **Tech Stack:** Bash, Linux procfs/sysfs, ROCm PyTorch or `hipcc`, standard POSIX/GNU utilities.
 

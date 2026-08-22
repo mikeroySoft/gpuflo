@@ -104,7 +104,7 @@ pub enum MonitorCommand {
 #[non_exhaustive]
 pub enum StartError {
     /// The host is not Linux.
-    #[error("gruflo requires Linux")]
+    #[error("gpuflo requires Linux")]
     UnsupportedHost,
     /// No AMD PCI/DRM device bound to `amdgpu` was discoverable.
     #[error("no AMD GPU bound to the amdgpu driver was found")]
@@ -119,7 +119,7 @@ pub enum StartError {
 #[non_exhaustive]
 pub enum MonitorError {
     /// XCP topology changed; a fresh process must re-enumerate.
-    #[error("GPU partition configuration changed; restart gruflo")]
+    #[error("GPU partition configuration changed; restart gpuflo")]
     PartitionConfigurationChanged,
     /// An injected or internal coordinator failure.
     #[error("monitor failure: {0}")]
@@ -296,7 +296,7 @@ fn spawn_summary_load(path: Option<PathBuf>) -> (Option<SummaryLoadLane>, Option
     };
     let (sender, receiver) = bounded(1);
     match std::thread::Builder::new()
-        .name("gruflo-persist-load".to_owned())
+        .name("gpuflo-persist-load".to_owned())
         .spawn(move || {
             let _ = sender.try_send(persist::load(&path));
         }) {
@@ -323,7 +323,7 @@ impl Monitor {
             return Err(StartError::UnsupportedHost);
         }
         #[cfg(debug_assertions)]
-        let debug_root = std::env::var_os("GRUFLO_HOST_ROOT").map(PathBuf::from);
+        let debug_root = std::env::var_os("GPUFLO_HOST_ROOT").map(PathBuf::from);
         #[cfg(not(debug_assertions))]
         let debug_root: Option<PathBuf> = None;
         let root = options
@@ -347,7 +347,7 @@ impl Monitor {
         let (done_tx, done_rx) = bounded::<Result<(), ShutdownError>>(1);
         let coordinator_shared = Arc::clone(&shared);
         let join = std::thread::Builder::new()
-            .name("gruflo-coordinator".to_owned())
+            .name("gpuflo-coordinator".to_owned())
             .spawn(move || {
                 let mut coordinator = Coordinator::new(
                     coordinator_shared,
@@ -560,7 +560,7 @@ fn spawn_kernel_lane(root: PathBuf, device: KernelDevice) -> KernelLane {
     let (result_tx, result_rx) = bounded::<TimedResult<KernelOutcome>>(1);
     let (done_tx, done_rx) = bounded::<()>(1);
     let join = std::thread::Builder::new()
-        .name(format!("gruflo-kernel-{}", device.disc.bdf))
+        .name(format!("gpuflo-kernel-{}", device.disc.bdf))
         .spawn(move || {
             let mut source = KernelSource::new(root);
             while let Ok(request) = request_rx.recv() {
@@ -628,7 +628,7 @@ fn spawn_discovery_lane(root: PathBuf) -> DiscoveryLane {
     let (result_tx, result_rx) = bounded::<TimedResult<Result<Vec<KernelDevice>, String>>>(1);
     let (done_tx, done_rx) = bounded::<()>(1);
     let join = std::thread::Builder::new()
-        .name("gruflo-discovery".to_owned())
+        .name("gpuflo-discovery".to_owned())
         .spawn(move || {
             let source = KernelSource::new(root);
             while let Ok(request) = request_rx.recv() {
@@ -704,7 +704,7 @@ fn spawn_amdsmi_lane() -> AmdSmiLane {
         bounded::<TimedResult<Vec<crate::source::amdsmi::AmdSmiSample>>>(1);
     let (done_tx, done_rx) = bounded::<()>(1);
     let join = std::thread::Builder::new()
-        .name("gruflo-amdsmi".to_owned())
+        .name("gpuflo-amdsmi".to_owned())
         .spawn(move || {
             let mut library: Option<AmdSmi> = None;
             let mut next_attempt = Instant::now();
@@ -790,7 +790,7 @@ fn spawn_process_lane(root: PathBuf) -> ProcessLane {
     let (result_tx, result_rx) = bounded::<TimedResult<ProcessSample>>(1);
     let (done_tx, done_rx) = bounded::<()>(1);
     let join = std::thread::Builder::new()
-        .name("gruflo-process".to_owned())
+        .name("gpuflo-process".to_owned())
         .spawn(move || {
             let source = ProcessSource::new(root);
             while let Ok(request) = request_rx.recv() {

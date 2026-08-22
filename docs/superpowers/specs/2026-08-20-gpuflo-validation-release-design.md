@@ -1,10 +1,10 @@
-# Gruflo Validation and Release Design
+# Gpuflo Validation and Release Design
 
 **Status:** Approved in grilling on 2026-08-20
 
 ## Purpose
 
-Gruflo is a small local instrument, not a testing platform. Its release evidence must prove the few failures that would make the product dishonest or unsafe: incorrect telemetry meaning, unavailable values becoming numbers, broken physical-GPU/XCP scope, machine-output incompatibility, failure to answer within one second, terminal corruption, or material workload perturbation.
+Gpuflo is a small local instrument, not a testing platform. Its release evidence must prove the few failures that would make the product dishonest or unsafe: incorrect telemetry meaning, unavailable values becoming numbers, broken physical-GPU/XCP scope, machine-output incompatibility, failure to answer within one second, terminal corruption, or material workload perturbation.
 
 Validation is risk-based and deliberately small. It does not attempt every hardware, driver, terminal, or failure combination. Deterministic fixture validation and live hardware qualification are distinct claims.
 
@@ -23,7 +23,7 @@ The four telemetry regimes are:
 3. discrete RDNA; and
 4. Ryzen APU shared/GTT-memory behavior.
 
-These are validation groups, not model allowlists. Gruflo still discovers capability from current interfaces rather than GPU names.
+These are validation groups, not model allowlists. Gpuflo still discovers capability from current interfaces rather than GPU names.
 
 A release may contain fixture-validated regimes, but release notes must not describe them as hardware-qualified. A known regression on a previously qualified regime blocks release until fixed or truthfully downgraded with the affected behavior removed from the supported claim. The first public release requires at least one qualified `amdgpu` host.
 
@@ -110,13 +110,13 @@ Each journey verifies cursor restoration, raw-mode exit, alternate-screen exit, 
 
 `NO_COLOR` and `--no-color` disable decorative and semantic color. Selection, focus, health severity, and unavailable states remain understandable through labels, symbols, and layout. No required meaning may depend on color alone.
 
-Human text and machine-readable modes never emit ANSI escapes. The release gate renders representative TUI frames with color disabled and checks the text/symbol distinctions. Gruflo makes no WCAG conformance claim for terminal emulators it does not control.
+Human text and machine-readable modes never emit ANSI escapes. The release gate renders representative TUI frames with color disabled and checks the text/symbol distinctions. Gpuflo makes no WCAG conformance claim for terminal emulators it does not control.
 
 ## Live hardware qualification
 
 Qualification runs the release candidate, not a debug-only substitute, on a representative host for the claimed regime. Record:
 
-- gruflo version and commit;
+- gpuflo version and commit;
 - Rust compiler and target;
 - kernel, amdgpu, ROCm, and AMD SMI versions when present;
 - GPU identity, observed `gpu_metrics` layout, memory pool, and partition mode;
@@ -149,7 +149,7 @@ The one-second answer is the hard product budget. On each qualified host:
 
 For a 60-second qualification run, record fast kernel collection latency and missed production ticks. The p95 fast collection latency must remain below 125 ms, leaving half of the 250 ms cadence for coordination and variance. Any operation reaching its 250 ms cadence is a failure regardless of percentile.
 
-Measure one representative stable GPU workload with and without gruflo using the same command and conditions. A repeatable throughput regression greater than 2% blocks qualification. Record CPU and resident memory for regression tracking, but do not impose arbitrary fixed limits before measured implementation evidence exists.
+Measure one representative stable GPU workload with and without gpuflo using the same command and conditions. A repeatable throughput regression greater than 2% blocks qualification. Record CPU and resident memory for regression tracking, but do not impose arbitrary fixed limits before measured implementation evidence exists.
 
 These are qualification checks, not a benchmark framework. Twenty startup samples and three matched workload samples are sufficient unless results are noisy near a limit.
 
@@ -167,7 +167,7 @@ Machine schema compatibility follows its existing major-version rule. Public Rus
 
 Before a packaging channel may publish a release candidate, it must provide:
 
-- the one `gruflo` binary produced from the tagged source;
+- the one `gpuflo` binary produced from the tagged source;
 - the project license and required third-party notices;
 - reproducible build instructions and a locked dependency graph;
 - version output that identifies the release;
@@ -228,18 +228,18 @@ The contract is satisfied when:
 - the first public release has at least one qualified physical `amdgpu` host;
 - load-bearing observation, topology, output, and terminal contracts have direct evidence;
 - first useful output arrives within one second on qualified hosts;
-- gruflo does not materially perturb a representative workload;
+- gpuflo does not materially perturb a representative workload;
 - no-color operation preserves meaning;
 - packaging can consume explicit license, build, version, and checksum prerequisites; and
 - validation remains proportionate to a small read-only tool.
 
 ## Evidence
 
-- [Inventory AMD telemetry sources and support](https://github.com/michaelroy-amd/gruflo/issues/8)
-- [AMD telemetry source research](https://github.com/michaelroy-amd/gruflo/blob/research/amd-telemetry-sources/research/amd-telemetry-sources.md)
-- [Identify the reusable code boundary](https://github.com/michaelroy-amd/gruflo/issues/2)
-- [Reuse boundary research](https://github.com/michaelroy-amd/gruflo/blob/research/reuse-boundary/research/reuse-boundary.md)
-- [Define the metric and health contract](./2026-08-20-gruflo-metric-health-design.md)
-- [Define the machine-readable output contract](./2026-08-20-gruflo-machine-readable-output-design.md)
-- [Define capability, failure, and permission behavior](./2026-08-20-gruflo-capability-failure-design.md)
-- [Choose the minimal Rust architecture](./2026-08-20-gruflo-rust-architecture-design.md)
+- [Inventory AMD telemetry sources and support](https://github.com/mikeroysoft/gpuflo/issues/8)
+- [AMD telemetry source research](https://github.com/mikeroysoft/gpuflo/blob/research/amd-telemetry-sources/research/amd-telemetry-sources.md)
+- [Identify the reusable code boundary](https://github.com/mikeroysoft/gpuflo/issues/2)
+- [Reuse boundary research](https://github.com/mikeroysoft/gpuflo/blob/research/reuse-boundary/research/reuse-boundary.md)
+- [Define the metric and health contract](./2026-08-20-gpuflo-metric-health-design.md)
+- [Define the machine-readable output contract](./2026-08-20-gpuflo-machine-readable-output-design.md)
+- [Define capability, failure, and permission behavior](./2026-08-20-gpuflo-capability-failure-design.md)
+- [Choose the minimal Rust architecture](./2026-08-20-gpuflo-rust-architecture-design.md)

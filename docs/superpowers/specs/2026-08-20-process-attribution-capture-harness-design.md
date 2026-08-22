@@ -4,9 +4,9 @@
 
 ## Purpose
 
-Provide one read-only command that a user can run after cloning gruflo onto a representative Linux ROCm host. The harness gathers sanitized evidence for the Wayfinder task **Verify process attribution on a live ROCm workload** without requiring manual PID discovery, source inspection, timing loops, or result assembly.
+Provide one read-only command that a user can run after cloning gpuflo onto a representative Linux ROCm host. The harness gathers sanitized evidence for the Wayfinder task **Verify process attribution on a live ROCm workload** without requiring manual PID discovery, source inspection, timing loops, or result assembly.
 
-This is temporary research tooling, not production gruflo code.
+This is temporary research tooling, not production gpuflo code.
 
 ## Invocation
 
@@ -116,7 +116,7 @@ Live validity is established only by running the committed harness on the remote
 
 The harness does not:
 
-- implement any gruflo production module;
+- implement any gpuflo production module;
 - install Python, PyTorch, ROCm, compilers, or packages;
 - accept arbitrary workload commands;
 - inspect every user’s process data;

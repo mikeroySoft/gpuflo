@@ -1116,7 +1116,7 @@ mod tests {
         assert_eq!(disc.id.as_str(), "gpu-73fbc17bb4b8d1ce");
         assert_eq!(disc.bdf.as_str(), "0000:41:00.0");
         assert_eq!(disc.name, "AMD Instinct MI210");
-        assert_eq!(disc.serial.as_deref(), Some("GRUFLO-FIXTURE-0001"));
+        assert_eq!(disc.serial.as_deref(), Some("GPUFLO-FIXTURE-0001"));
         assert_eq!(disc.pool, MemoryPool::VRAM);
         assert_eq!(disc.partitions.len(), 1);
         assert!(disc.partitions[0].is_primary);
@@ -1124,7 +1124,7 @@ mod tests {
 
     #[test]
     fn discovery_on_empty_root_finds_nothing() {
-        let source = KernelSource::new(PathBuf::from("/nonexistent-gruflo-root"));
+        let source = KernelSource::new(PathBuf::from("/nonexistent-gpuflo-root"));
         assert!(source.discover().is_err());
     }
 
@@ -1343,7 +1343,7 @@ mod tests {
     #[test]
     fn unreadable_existing_node_is_permission_denied() {
         use std::os::unix::fs::PermissionsExt;
-        let dir = std::env::temp_dir().join(format!("gruflo-kernel-perm-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("gpuflo-kernel-perm-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let node = dir.join("gpu_busy_percent");
         std::fs::write(&node, "50\n").unwrap();

@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use gruflo::{
+use gpuflo::{
     Monitor, MonitorCommand, MonitorEvent, MonitorOptions, PhysicalGpuId, ReceiveTimeoutError,
 };
 
@@ -38,7 +38,7 @@ fn mutable_root(scenario: &str, tag: &str) -> PathBuf {
     let source = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/kernel")
         .join(scenario);
-    let root = std::env::temp_dir().join(format!("gruflo-journey-{tag}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("gpuflo-journey-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     copy_tree(&source, &root);
     root
@@ -64,13 +64,13 @@ fn start_with_options(root: &Path, options: MonitorOptions) -> Monitor {
     let _guard = EnvGuard::acquire();
     // SAFETY: serialized within this test process and consumed synchronously
     // by Monitor::start before the guard is released.
-    unsafe { std::env::set_var("GRUFLO_HOST_ROOT", root) };
+    unsafe { std::env::set_var("GPUFLO_HOST_ROOT", root) };
     let result = Monitor::start(options);
-    unsafe { std::env::remove_var("GRUFLO_HOST_ROOT") };
+    unsafe { std::env::remove_var("GPUFLO_HOST_ROOT") };
     result.expect("monitor starts on the fixture host")
 }
 
-fn next_snapshot(monitor: &Monitor) -> gruflo::Snapshot {
+fn next_snapshot(monitor: &Monitor) -> gpuflo::Snapshot {
     loop {
         match monitor
             .receive_timeout(Duration::from_secs(3))
@@ -209,7 +209,7 @@ fn partition_configuration_change_is_fatal_and_closes_the_stream() {
             MonitorEvent::Fatal(error) => {
                 assert_eq!(
                     error.to_string(),
-                    "GPU partition configuration changed; restart gruflo"
+                    "GPU partition configuration changed; restart gpuflo"
                 );
                 break;
             }
@@ -230,7 +230,7 @@ fn partition_configuration_change_is_fatal_and_closes_the_stream() {
 fn shutdown_surfaces_persistence_failure() {
     let root = mutable_root("discrete-spx", "persist-failure");
     let blocked_parent =
-        std::env::temp_dir().join(format!("gruflo-state-blocked-{}", std::process::id()));
+        std::env::temp_dir().join(format!("gpuflo-state-blocked-{}", std::process::id()));
     std::fs::write(&blocked_parent, "not a directory").unwrap();
     let mut options = MonitorOptions::new();
     options.summary_path = Some(blocked_parent.join("daily.json"));

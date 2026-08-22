@@ -1,4 +1,4 @@
-//! Canonical, semver-supported gruflo vocabulary.
+//! Canonical, semver-supported gpuflo vocabulary.
 //!
 //! Every metric is an [`Observation`]: either a numeric value with its source
 //! observation time or exactly one explicit [`ObservationState`]. Physical
@@ -410,9 +410,9 @@ pub struct PhysicalGpu {
 pub struct Snapshot {
     /// Integer major version of the machine-output schema.
     pub schema_version: u32,
-    /// Version of the producing gruflo binary; not a payload compatibility key.
-    pub gruflo_version: String,
-    /// When gruflo assembled this exportable snapshot.
+    /// Version of the producing gpuflo binary; not a payload compatibility key.
+    pub gpuflo_version: String,
+    /// When gpuflo assembled this exportable snapshot.
     pub sampled_at: Timestamp,
     /// Run-local exportable snapshot counter; present on streamed records.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -426,7 +426,7 @@ impl Snapshot {
     pub fn new(sampled_at: Timestamp, sequence: Option<u64>, gpus: Vec<PhysicalGpu>) -> Self {
         Self {
             schema_version: SCHEMA_VERSION,
-            gruflo_version: env!("CARGO_PKG_VERSION").to_owned(),
+            gpuflo_version: env!("CARGO_PKG_VERSION").to_owned(),
             sampled_at,
             sequence,
             gpus,

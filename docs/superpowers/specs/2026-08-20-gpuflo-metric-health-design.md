@@ -1,16 +1,16 @@
-# Gruflo Metric and Health Design
+# Gpuflo Metric and Health Design
 
 **Status:** Approved in brainstorming on 2026-08-20
 
 ## Purpose
 
-Gruflo is a universal AMD GPU instrument for a user running local LLM inference in another terminal. A glance at the dashboard must answer, within one second:
+Gpuflo is a universal AMD GPU instrument for a user running local LLM inference in another terminal. A glance at the dashboard must answer, within one second:
 
 1. Is the selected GPU working?
 2. How much device memory is occupied?
 3. Is the GPU limited, throttled, faulted, asleep, or reporting stale data?
 
-Gruflo observes GPU behavior only. It does not connect to inference engines or infer application phases.
+Gpuflo observes GPU behavior only. It does not connect to inference engines or infer application phases.
 
 ## Product principles
 
@@ -44,7 +44,7 @@ Show:
 
 Discrete GPUs use VRAM. APUs explicitly identify shared or GTT memory; they must not present it as dedicated VRAM.
 
-High occupancy is neutral. Occupancy alone never creates a warning. Gruflo reports memory pressure only when a telemetry source explicitly reports allocation pressure or failure.
+High occupancy is neutral. Occupancy alone never creates a warning. Gpuflo reports memory pressure only when a telemetry source explicitly reports allocation pressure or failure.
 
 ### Supporting instruments
 
@@ -167,13 +167,13 @@ The contract is satisfied when:
 - the process overlay never claims unsupported utilization precision;
 - all responsive TUI and machine-readable modes use the same metric meanings.
 
-The companion [machine-readable output design](./2026-08-20-gruflo-machine-readable-output-design.md) fixes the text, JSON, stream, tiny, topology, state, unit, timestamp, versioning, and exit contracts for those meanings.
+The companion [machine-readable output design](./2026-08-20-gpuflo-machine-readable-output-design.md) fixes the text, JSON, stream, tiny, topology, state, unit, timestamp, versioning, and exit contracts for those meanings.
 
-The companion [capability, failure, and permission design](./2026-08-20-gruflo-capability-failure-design.md) fixes startup, probing, recovery, hotplug, malformed-source, partial-failure, and terminal-restoration behavior.
+The companion [capability, failure, and permission design](./2026-08-20-gpuflo-capability-failure-design.md) fixes startup, probing, recovery, hotplug, malformed-source, partial-failure, and terminal-restoration behavior.
 
 ## Evidence
 
-- [Inventory AMD telemetry sources and support](https://github.com/michaelroy-amd/gruflo/issues/8)
-- [AMD telemetry source research](https://github.com/michaelroy-amd/gruflo/blob/research/amd-telemetry-sources/research/amd-telemetry-sources.md)
-- [Identify the reusable code boundary](https://github.com/michaelroy-amd/gruflo/issues/2)
-- [Reuse boundary research](https://github.com/michaelroy-amd/gruflo/blob/research/reuse-boundary/research/reuse-boundary.md)
+- [Inventory AMD telemetry sources and support](https://github.com/mikeroysoft/gpuflo/issues/8)
+- [AMD telemetry source research](https://github.com/mikeroysoft/gpuflo/blob/research/amd-telemetry-sources/research/amd-telemetry-sources.md)
+- [Identify the reusable code boundary](https://github.com/mikeroysoft/gpuflo/issues/2)
+- [Reuse boundary research](https://github.com/mikeroysoft/gpuflo/blob/research/reuse-boundary/research/reuse-boundary.md)

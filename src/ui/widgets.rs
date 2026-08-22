@@ -204,7 +204,7 @@ fn render_tiny(frame: &mut Frame<'_>, view: &View<'_>, area: Rect) {
     };
 
     let mut spans = vec![
-        Span::styled("gruflo", styler.bold(palette.fg)),
+        Span::styled("gpuflo", styler.bold(palette.fg)),
         Span::styled(format!("  {label}  "), styler.fg(palette.muted)),
     ];
     match primary_partition(gpu) {
@@ -303,7 +303,7 @@ fn render_header(frame: &mut Frame<'_>, view: &View<'_>, area: Rect) {
             styler.fg(format::rgb_lerp(palette.warning, palette.accent, pulse)),
         ),
         Span::raw("  "),
-        Span::styled("gruflo", styler.bold(palette.fg)),
+        Span::styled("gpuflo", styler.bold(palette.fg)),
     ]);
     frame.render_widget(Paragraph::new(line).alignment(Alignment::Center), area);
 }

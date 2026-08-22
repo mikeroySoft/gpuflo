@@ -103,7 +103,7 @@ def shipped_packages():
     for line in tree.splitlines():
         line = line.replace(" (*)", "").strip()
         match = re.match(r"^(\S+) v(\S+)", line)
-        if match and match.group(1) != "gruflo":
+        if match and match.group(1) != "gpuflo":
             shipped.add((match.group(1), match.group(2)))
     return shipped
 
@@ -149,9 +149,9 @@ def main() -> int:
         return 1
 
     lines = [
-        "Third-party notices for gruflo",
+        "Third-party notices for gpuflo",
         "",
-        "gruflo is distributed under the MIT license (see LICENSE).",
+        "gpuflo is distributed under the MIT license (see LICENSE).",
         f"The {TARGET} binary uses the locked Rust crates below. Their exact",
         "redistribution notices and license texts are reproduced from each crate.",
         "",

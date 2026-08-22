@@ -1,10 +1,10 @@
-# Gruflo Presentation Configuration Design
+# Gpuflo Presentation Configuration Design
 
 **Status:** Approved in grilling on 2026-08-20
 
 ## Purpose
 
-Gruflo permits a few presentation preferences without making metric meaning, responsive safety, or machine output depend on personal configuration. The initial configuration surface contains only theme, preferred responsive mode, and color disablement.
+Gpuflo permits a few presentation preferences without making metric meaning, responsive safety, or machine output depend on personal configuration. The initial configuration surface contains only theme, preferred responsive mode, and color disablement.
 
 Everything affecting telemetry collection, health semantics, topology, units, history, output schema, or script behavior remains fixed.
 
@@ -13,16 +13,16 @@ Everything affecting telemetry collection, health semantics, topology, units, hi
 The approved sparse TOML file remains:
 
 ```text
-$XDG_CONFIG_HOME/gruflo/config.toml
+$XDG_CONFIG_HOME/gpuflo/config.toml
 ```
 
 with fallback:
 
 ```text
-~/.config/gruflo/config.toml
+~/.config/gpuflo/config.toml
 ```
 
-The normal file is blank. Defaults live in code, every key is optional, and gruflo never writes preferences back to the file.
+The normal file is blank. Defaults live in code, every key is optional, and gpuflo never writes preferences back to the file.
 
 The complete initial TOML key set is:
 
@@ -32,7 +32,7 @@ mode = "auto"
 no_color = false
 ```
 
-These lines illustrate available overrides; gruflo does not generate them. Removing or commenting a key restores its built-in default.
+These lines illustrate available overrides; gpuflo does not generate them. Removing or commenting a key restores its built-in default.
 
 ## Precedence
 
@@ -58,7 +58,7 @@ Three built-in themes ship initially:
 
 A theme maps semantic roles—background, foreground, muted text, accent, warning, fault, borders, and graph intensity—to terminal colors. It cannot change health priority, metric meaning, wording, layout content, or unavailable-state semantics.
 
-Theme names describe semantic palettes, not guaranteed RGB values. Gruflo uses truecolor when the terminal supports it and degrades to suitable ANSI colors otherwise. Required distinctions remain visible through text, symbols, emphasis, and layout.
+Theme names describe semantic palettes, not guaranteed RGB values. Gpuflo uses truecolor when the terminal supports it and degrades to suitable ANSI colors otherwise. Required distinctions remain visible through text, symbols, emphasis, and layout.
 
 No initial support exists for:
 
@@ -89,7 +89,7 @@ Accepted values are:
 
 `mode` is the canonical name for the full selected-GPU instrument cluster. No legacy alias is accepted.
 
-`auto` chooses the richest approved surface that fits the current terminal. A forced value is a preference, not permission to clip or overflow. If the preferred surface does not fit, gruflo selects the largest fitting fallback. A later resize may restore the preferred surface when it fits again.
+`auto` chooses the richest approved surface that fits the current terminal. A forced value is a preference, not permission to clip or overflow. If the preferred surface does not fit, gpuflo selects the largest fitting fallback. A later resize may restore the preferred surface when it fits again.
 
 The `m` key cycles responsive preferences for the current session. It does not persist. Responsive breakpoints and fit calculations remain implementation-owned fixed policy rather than user settings.
 
@@ -137,11 +137,11 @@ The existing output-selection and GPU-selection flags remain CLI-only:
 
 TOML cannot select an output surface, select/filter a GPU, or redirect output. A script therefore behaves the same regardless of the invoking user’s presentation file.
 
-There is no initial `--config` path override. Gruflo has one documented XDG location, keeping path behavior and support diagnostics predictable.
+There is no initial `--config` path override. Gpuflo has one documented XDG location, keeping path behavior and support diagnostics predictable.
 
 ## Configuration errors
 
-The configuration schema is closed. Gruflo rejects:
+The configuration schema is closed. Gpuflo rejects:
 
 - unknown keys;
 - wrong TOML types;
@@ -156,7 +156,7 @@ A configuration error:
 3. occurs before terminal takeover and monitor startup; and
 4. exits `2`.
 
-Gruflo does not silently ignore typos or replace an invalid preference with a default. A missing or blank file remains valid and uses built-in defaults.
+Gpuflo does not silently ignore typos or replace an invalid preference with a default. A missing or blank file remains valid and uses built-in defaults.
 
 ## Interactive behavior
 
@@ -241,10 +241,10 @@ The presentation configuration is settled when:
 
 ## Evidence
 
-- [Define sparse configuration behavior](https://github.com/michaelroy-amd/gruflo/issues/13)
-- [Prototype the responsive dashboard language](https://github.com/michaelroy-amd/gruflo/issues/7)
-- [Define the metric and health contract](./2026-08-20-gruflo-metric-health-design.md)
-- [Define the machine-readable output contract](./2026-08-20-gruflo-machine-readable-output-design.md)
-- [Define capability, failure, and permission behavior](./2026-08-20-gruflo-capability-failure-design.md)
-- [Choose the minimal Rust architecture](./2026-08-20-gruflo-rust-architecture-design.md)
-- [Define the validation and release contract](./2026-08-20-gruflo-validation-release-design.md)
+- [Define sparse configuration behavior](https://github.com/mikeroysoft/gpuflo/issues/13)
+- [Prototype the responsive dashboard language](https://github.com/mikeroysoft/gpuflo/issues/7)
+- [Define the metric and health contract](./2026-08-20-gpuflo-metric-health-design.md)
+- [Define the machine-readable output contract](./2026-08-20-gpuflo-machine-readable-output-design.md)
+- [Define capability, failure, and permission behavior](./2026-08-20-gpuflo-capability-failure-design.md)
+- [Choose the minimal Rust architecture](./2026-08-20-gpuflo-rust-architecture-design.md)
+- [Define the validation and release contract](./2026-08-20-gpuflo-validation-release-design.md)

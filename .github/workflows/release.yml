@@ -55,14 +55,14 @@ jobs:
             || { echo "${MANIFEST} version does not match"; exit 1; }
           grep -Fx -- "- Commit: ${GITHUB_SHA}" "${MANIFEST}" \
             || { echo "${MANIFEST} commit does not match tag checkout"; exit 1; }
-          NAME="gruflo-${VERSION}-x86_64-unknown-linux-gnu"
+          NAME="gpuflo-${VERSION}-x86_64-unknown-linux-gnu"
           mkdir staging
-          cp target/x86_64-unknown-linux-gnu/release/gruflo \
+          cp target/x86_64-unknown-linux-gnu/release/gpuflo \
              LICENSE THIRD_PARTY_NOTICES.txt README.md staging/
           tar -C staging -czf "${NAME}.tar.gz" \
-            gruflo LICENSE THIRD_PARTY_NOTICES.txt README.md
+            gpuflo LICENSE THIRD_PARTY_NOTICES.txt README.md
           sha256sum "${NAME}.tar.gz" > SHA256SUMS
-          MAX_GLIBC="$(objdump -T staging/gruflo \
+          MAX_GLIBC="$(objdump -T staging/gpuflo \
             | grep -o 'GLIBC_[0-9.]*' | sort -V | tail -n1)"
           test -n "${MAX_GLIBC}"
           grep -Fx -- "- Maximum required GLIBC: ${MAX_GLIBC}" "${MANIFEST}" \
@@ -70,20 +70,20 @@ jobs:
           {
             echo "Maximum required symbol version: ${MAX_GLIBC}"
             ldd --version | sed -n '1p'
-            file staging/gruflo
-            readelf -d staging/gruflo | grep NEEDED || true
+            file staging/gpuflo
+            readelf -d staging/gpuflo | grep NEEDED || true
           } > GLIBC_BASELINE.txt
           # The archived binary must identify the release, and the archive
           # root must contain exactly the four distributable files.
-          staging/gruflo --version | grep -F "${VERSION#v}"
+          staging/gpuflo --version | grep -F "${VERSION#v}"
           test "$(tar -tzf "${NAME}.tar.gz" | sort | paste -sd ' ' -)" = \
-            "LICENSE README.md THIRD_PARTY_NOTICES.txt gruflo"
+            "LICENSE README.md THIRD_PARTY_NOTICES.txt gpuflo"
 
       - name: publish the GitHub release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           files: |
-            gruflo-*.tar.gz
+            gpuflo-*.tar.gz
             SHA256SUMS
             GLIBC_BASELINE.txt
             validation/*.md

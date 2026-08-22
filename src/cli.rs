@@ -11,11 +11,11 @@ use crate::model::PciBdf;
 
 /// Authoritative CLI reference printed by `--help`.
 pub(crate) const HELP: &str = "\
-gruflo — read-only AMD GPU instrument for Linux amdgpu hosts
+gpuflo — read-only AMD GPU instrument for Linux amdgpu hosts
 
-Usage: gruflo [OPTIONS]
+Usage: gpuflo [OPTIONS]
 
-Without options gruflo runs the interactive terminal instrument.
+Without options gpuflo runs the interactive terminal instrument.
 
 Output modes (mutually exclusive):
   --once           Print one human-readable line per physical GPU, then exit
@@ -37,8 +37,8 @@ Other:
   --help           Print this help
   --version        Print the version
 
-Configuration: $XDG_CONFIG_HOME/gruflo/config.toml (fallback
-~/.config/gruflo/config.toml) may set theme, mode, and no_color only.
+Configuration: $XDG_CONFIG_HOME/gpuflo/config.toml (fallback
+~/.config/gpuflo/config.toml) may set theme, mode, and no_color only.
 CLI flags override the file. Exit codes: 0 success (including partial
 telemetry and broken pipe), 1 fatal runtime failure, 2 usage or
 configuration error, 130 interrupted.

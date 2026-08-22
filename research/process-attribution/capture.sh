@@ -4,7 +4,7 @@ set -Eeuo pipefail
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 readonly RESULTS_ROOT="$SCRIPT_DIR/results"
 readonly RUN_STAMP="$(date -u +%Y%m%dT%H%M%S%NZ)"
-readonly TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/gruflo-process-attribution.XXXXXX")"
+readonly TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/gpuflo-process-attribution.XXXXXX")"
 readonly STAGING="$TMP_ROOT/$RUN_STAMP"
 
 WORKLOAD_PID=""
@@ -20,7 +20,7 @@ cleanup() {
         wait "$WORKLOAD_PID" 2>/dev/null || true
     fi
     if ((status != 0)) && [[ -d "$STAGING" && -z "$FINAL_RESULT" ]]; then
-        printf 'gruflo process-attribution capture: partial evidence was discarded after failure\n' >&2
+        printf 'gpuflo process-attribution capture: partial evidence was discarded after failure\n' >&2
     fi
     rm -rf -- "$TMP_ROOT"
     exit "$status"
@@ -28,7 +28,7 @@ cleanup() {
 trap cleanup EXIT INT TERM HUP
 
 fail() {
-    printf 'gruflo process-attribution capture: %s\n' "$*" >&2
+    printf 'gpuflo process-attribution capture: %s\n' "$*" >&2
     exit 1
 }
 

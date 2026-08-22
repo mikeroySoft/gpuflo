@@ -31,8 +31,8 @@ pub(crate) fn run_from_env() -> u8 {
     let invocation = match cli::parse(std::env::args_os().skip(1)) {
         Ok(invocation) => invocation,
         Err(error) => {
-            eprintln!("gruflo: {error}");
-            eprintln!("run `gruflo --help` for usage");
+            eprintln!("gpuflo: {error}");
+            eprintln!("run `gpuflo --help` for usage");
             return EXIT_USAGE;
         }
     };
@@ -42,7 +42,7 @@ pub(crate) fn run_from_env() -> u8 {
             return EXIT_OK;
         }
         Invocation::Version => {
-            println!("gruflo {}", env!("CARGO_PKG_VERSION"));
+            println!("gpuflo {}", env!("CARGO_PKG_VERSION"));
             return EXIT_OK;
         }
         Invocation::Run(options) => options,
@@ -52,7 +52,7 @@ pub(crate) fn run_from_env() -> u8 {
     let presentation = match config::resolve(&environment, &options) {
         Ok(presentation) => presentation,
         Err(error) => {
-            eprintln!("gruflo: {error}");
+            eprintln!("gpuflo: {error}");
             return EXIT_USAGE;
         }
     };
@@ -64,7 +64,7 @@ pub(crate) fn run_from_env() -> u8 {
     let monitor = match Monitor::start(monitor_options) {
         Ok(monitor) => monitor,
         Err(error) => {
-            eprintln!("gruflo: {error}");
+            eprintln!("gpuflo: {error}");
             return EXIT_FATAL;
         }
     };
@@ -83,13 +83,13 @@ pub(crate) fn run_from_env() -> u8 {
                 let snapshot = match first_snapshot(&monitor) {
                     Ok(snapshot) => snapshot,
                     Err(error) => {
-                        eprintln!("gruflo: {error}");
+                        eprintln!("gpuflo: {error}");
                         let _ = monitor.shutdown();
                         return EXIT_FATAL;
                     }
                 };
                 if let Err(error) = select_gpu(&snapshot, &options.gpu) {
-                    eprintln!("gruflo: {error}");
+                    eprintln!("gpuflo: {error}");
                     let _ = monitor.shutdown();
                     return EXIT_USAGE;
                 }
@@ -104,10 +104,10 @@ fn apply_debug_seams(options: &mut MonitorOptions) {
     if !cfg!(debug_assertions) {
         return;
     }
-    if let Some(root) = std::env::var_os("GRUFLO_HOST_ROOT") {
+    if let Some(root) = std::env::var_os("GPUFLO_HOST_ROOT") {
         options.set_debug_host_root(std::path::PathBuf::from(root));
     }
-    if let Ok(ms) = std::env::var("GRUFLO_FATAL_AFTER_MS")
+    if let Ok(ms) = std::env::var("GPUFLO_FATAL_AFTER_MS")
         && let Ok(ms) = ms.parse::<u64>()
     {
         options.set_debug_fatal_after(Duration::from_millis(ms));
@@ -121,7 +121,7 @@ fn first_snapshot(monitor: &Monitor) -> Result<Snapshot, String> {
         let remaining = deadline.saturating_duration_since(std::time::Instant::now());
         match monitor.receive_timeout(remaining) {
             Ok(MonitorEvent::Snapshot(snapshot)) => return Ok(snapshot),
-            Ok(MonitorEvent::Notice(notice)) => eprintln!("gruflo: {}", notice.message),
+            Ok(MonitorEvent::Notice(notice)) => eprintln!("gpuflo: {}", notice.message),
             Ok(MonitorEvent::Fatal(error)) => return Err(error.to_string()),
             Err(_) => return Err("no snapshot could be produced".to_owned()),
         }
@@ -166,7 +166,7 @@ fn one_shot(
     let snapshot = match first_snapshot(&monitor) {
         Ok(snapshot) => snapshot,
         Err(message) => {
-            eprintln!("gruflo: {message}");
+            eprintln!("gpuflo: {message}");
             let _ = monitor.shutdown();
             return EXIT_FATAL;
         }
@@ -174,7 +174,7 @@ fn one_shot(
     if matches!(options.output, OutputMode::Tiny)
         && let Err(message) = select_gpu(&snapshot, &options.gpu)
     {
-        eprintln!("gruflo: {message}");
+        eprintln!("gpuflo: {message}");
         let _ = monitor.shutdown();
         return if snapshot.gpus.is_empty() {
             EXIT_FATAL
@@ -189,7 +189,7 @@ fn one_shot(
         Ok(()) => (EXIT_OK, false),
         Err(error) if error.kind() == std::io::ErrorKind::BrokenPipe => (EXIT_OK, true),
         Err(error) => {
-            eprintln!("gruflo: cannot write output: {error}");
+            eprintln!("gpuflo: cannot write output: {error}");
             (EXIT_FATAL, false)
         }
     };
@@ -197,7 +197,7 @@ fn one_shot(
         Ok(()) => code,
         Err(_) if broken_pipe => EXIT_OK,
         Err(error) => {
-            eprintln!("gruflo: {error}");
+            eprintln!("gpuflo: {error}");
             EXIT_FATAL
         }
     }
@@ -230,7 +230,7 @@ fn json_stream(monitor: Monitor) -> u8 {
     if let Err(error) =
         signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&sigint))
     {
-        eprintln!("gruflo: cannot install SIGINT handler: {error}");
+        eprintln!("gpuflo: cannot install SIGINT handler: {error}");
         let _ = monitor.shutdown();
         return EXIT_FATAL;
     }
@@ -250,14 +250,14 @@ fn json_stream(monitor: Monitor) -> u8 {
                         break EXIT_OK;
                     }
                     Err(error) => {
-                        eprintln!("gruflo: cannot write output: {error}");
+                        eprintln!("gpuflo: cannot write output: {error}");
                         break EXIT_FATAL;
                     }
                 }
             }
-            Ok(MonitorEvent::Notice(notice)) => eprintln!("gruflo: {}", notice.message),
+            Ok(MonitorEvent::Notice(notice)) => eprintln!("gpuflo: {}", notice.message),
             Ok(MonitorEvent::Fatal(error)) => {
-                eprintln!("gruflo: {error}");
+                eprintln!("gpuflo: {error}");
                 break EXIT_FATAL;
             }
             Err(crate::monitor::ReceiveTimeoutError::Timeout) => {}
@@ -268,7 +268,7 @@ fn json_stream(monitor: Monitor) -> u8 {
         Ok(()) => code,
         Err(_) if broken_pipe => EXIT_OK,
         Err(error) => {
-            eprintln!("gruflo: {error}");
+            eprintln!("gpuflo: {error}");
             EXIT_FATAL
         }
     }
@@ -289,7 +289,7 @@ fn interactive(
         (signal_hook::consts::SIGHUP, Arc::clone(&stop)),
     ] {
         if let Err(error) = signal_hook::flag::register(signal, flag) {
-            eprintln!("gruflo: cannot install signal handler: {error}");
+            eprintln!("gpuflo: cannot install signal handler: {error}");
             let _ = monitor.shutdown();
             return EXIT_FATAL;
         }
@@ -316,7 +316,7 @@ fn interactive(
         Err(error) => {
             let _ = std::panic::take_hook();
             std::panic::set_hook(Box::new(move |info| original_hook(info)));
-            eprintln!("gruflo: cannot acquire the terminal: {error}");
+            eprintln!("gpuflo: cannot acquire the terminal: {error}");
             let _ = monitor.shutdown();
             return EXIT_FATAL;
         }
@@ -345,18 +345,18 @@ fn interactive(
             }
         }
         Ok(Ok(ui::UiOutcome::MonitorFatal(error))) => {
-            eprintln!("gruflo: {error}");
+            eprintln!("gpuflo: {error}");
             EXIT_FATAL
         }
         Ok(Err(error)) => {
-            eprintln!("gruflo: interface failure: {error}");
+            eprintln!("gpuflo: interface failure: {error}");
             EXIT_FATAL
         }
         Err(_) => EXIT_FATAL, // panic hook already printed after restoration.
     };
     let shutdown_error = monitor.shutdown().err();
     if let Some(error) = &shutdown_error {
-        eprintln!("gruflo: {error}");
+        eprintln!("gpuflo: {error}");
     }
     if restore_failed || shutdown_error.is_some() {
         return if code == EXIT_SIGINT {

@@ -1,4 +1,4 @@
-# Gruflo Domain Glossary
+# Gpuflo Domain Glossary
 
 ## Observation state
 

@@ -1,5 +1,5 @@
-//! The gruflo binary: process exit mapping only.
+//! The gpuflo binary: process exit mapping only.
 
 fn main() -> std::process::ExitCode {
-    std::process::ExitCode::from(gruflo::run_from_env())
+    std::process::ExitCode::from(gpuflo::run_from_env())
 }

@@ -238,7 +238,7 @@ fn mini_frame_shows_graph_panels_only() {
 fn narrow_frame_falls_to_tiny() {
     let state = state_with_model(true);
     let text = buffer_text(&render(&state, 40, 8));
-    assert!(text.contains("gruflo"));
+    assert!(text.contains("gpuflo"));
     assert!(text.contains("activity 88%"));
 }
 
@@ -246,7 +246,7 @@ fn narrow_frame_falls_to_tiny() {
 fn one_line_terminal_renders_tiny() {
     let state = state_with_model(true);
     let text = buffer_text(&render(&state, 20, 1));
-    assert!(text.contains("gruflo"));
+    assert!(text.contains("gpuflo"));
 }
 
 #[test]

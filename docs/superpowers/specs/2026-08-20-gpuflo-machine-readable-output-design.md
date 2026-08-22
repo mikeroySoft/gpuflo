@@ -1,10 +1,10 @@
-# Gruflo Machine-Readable Output Design
+# Gpuflo Machine-Readable Output Design
 
 **Status:** Approved in grilling on 2026-08-20
 
 ## Purpose
 
-Gruflo's non-interactive surfaces expose the same observations, scope, health meaning, and unavailable states as the TUI. They do not create a second metric model, synthesize physical-GPU utilization, or turn missing telemetry into zero.
+Gpuflo's non-interactive surfaces expose the same observations, scope, health meaning, and unavailable states as the TUI. They do not create a second metric model, synthesize physical-GPU utilization, or turn missing telemetry into zero.
 
 The initial contract covers the mode instruments only:
 
@@ -76,7 +76,7 @@ All JSON names are lower snake case. One-shot JSON has this envelope:
 ```json
 {
   "schema_version": 1,
-  "gruflo_version": "0.1.0",
+  "gpuflo_version": "0.1.0",
   "sampled_at": "2026-08-20T23:45:12.250Z",
   "gpus": []
 }
@@ -85,8 +85,8 @@ All JSON names are lower snake case. One-shot JSON has this envelope:
 Continuous records add `sequence` beside `sampled_at`. No other surface changes the payload shape.
 
 - `schema_version` is the output schema's integer major version.
-- `gruflo_version` is the producing binary's version and does not govern payload compatibility.
-- `sampled_at` is when gruflo assembled the exportable snapshot.
+- `gpuflo_version` is the producing binary's version and does not govern payload compatibility.
+- `sampled_at` is when gpuflo assembled the exportable snapshot.
 - `sequence` counts produced exportable fast snapshots, starts at `1`, and resets on process start.
 - `gpus` contains every physical GPU in display order.
 
@@ -130,7 +130,7 @@ A stale observation contains the time of the last good observation but no numeri
 }
 ```
 
-Consumers derive stale age from `sampled_at - observed_at`. Gruflo never emits a stale `value`, JSON `null`, `NaN`, or infinity. Source sentinels and parse failures never leak as numbers.
+Consumers derive stale age from `sampled_at - observed_at`. Gpuflo never emits a stale `value`, JSON `null`, `NaN`, or infinity. Source sentinels and parse failures never leak as numbers.
 
 UTC timestamps use RFC 3339 with `Z`. They carry milliseconds at minimum and preserve finer source precision when the source provides it; they do not add false precision. A snapshot can therefore contain observations with different timestamps from the approved fast and slow cadences.
 
@@ -158,7 +158,7 @@ The JSON hierarchy follows hardware scope instead of flattening processor handle
 
 A physical GPU has:
 
-- an opaque `id` stable enough for gruflo joins and persistence;
+- an opaque `id` stable enough for gpuflo joins and persistence;
 - an ephemeral display `index`;
 - PCI `bdf`;
 - model `name`;
@@ -199,7 +199,7 @@ The category supports automation; the message remains source-backed and human-re
 ```json
 {
   "schema_version": 1,
-  "gruflo_version": "0.1.0",
+  "gpuflo_version": "0.1.0",
   "sampled_at": "2026-08-20T23:45:12.250Z",
   "gpus": [
     {
@@ -298,11 +298,11 @@ Compatible version-1 evolution may:
 
 Consumers must ignore unknown fields and handle unknown strings generically without treating them as numeric zero or normal health.
 
-A removal, rename, type change, scope change, unit change, or meaning change requires a new schema major version. `gruflo_version` changes independently.
+A removal, rename, type change, scope change, unit change, or meaning change requires a new schema major version. `gpuflo_version` changes independently.
 
 ## Errors and exit behavior
 
-Unavailable or stale observations are data, not command failures. A snapshot containing partial telemetry exits successfully as long as gruflo discovered at least one physical GPU at startup and produced the contracted output. If every GPU later disappears, a running JSON stream remains successful, emits snapshots with `gpus: []`, and continues discovery.
+Unavailable or stale observations are data, not command failures. A snapshot containing partial telemetry exits successfully as long as gpuflo discovered at least one physical GPU at startup and produced the contracted output. If every GPU later disappears, a running JSON stream remains successful, emits snapshots with `gpus: []`, and continues discovery.
 
 Non-interactive modes use these exits:
 
@@ -313,9 +313,9 @@ Non-interactive modes use these exits:
 | `2` | Command-line usage or startup configuration error. |
 | `130` | Interrupted by SIGINT. |
 
-Fatal diagnostics go to stderr. JSON stdout contains snapshots only. A broken pipe is silent and exits `0`, so `gruflo --json-stream | head` behaves as a successful Unix pipeline.
+Fatal diagnostics go to stderr. JSON stdout contains snapshots only. A broken pipe is silent and exits `0`, so `gpuflo --json-stream | head` behaves as a successful Unix pipeline.
 
-The companion [capability, failure, and permission design](./2026-08-20-gruflo-capability-failure-design.md) defines how source failures map to observation states and when a runtime topology change requires restart.
+The companion [capability, failure, and permission design](./2026-08-20-gpuflo-capability-failure-design.md) defines how source failures map to observation states and when a runtime topology change requires restart.
 
 ## Explicit non-goals
 
@@ -348,11 +348,11 @@ The contract is settled when:
 
 ## Evidence
 
-- [Define the metric and health contract](https://github.com/michaelroy-amd/gruflo/issues/5)
-- [Set sampling, smoothing, and history semantics](https://github.com/michaelroy-amd/gruflo/issues/3)
-- [Prototype the responsive dashboard language](https://github.com/michaelroy-amd/gruflo/issues/7)
-- [Set the process overlay contract](https://github.com/michaelroy-amd/gruflo/issues/4)
-- [Inventory AMD telemetry sources and support](https://github.com/michaelroy-amd/gruflo/issues/8)
-- [AMD telemetry source research](https://github.com/michaelroy-amd/gruflo/blob/research/amd-telemetry-sources/research/amd-telemetry-sources.md)
-- [Identify the reusable code boundary](https://github.com/michaelroy-amd/gruflo/issues/2)
-- [Reuse boundary research](https://github.com/michaelroy-amd/gruflo/blob/research/reuse-boundary/research/reuse-boundary.md)
+- [Define the metric and health contract](https://github.com/mikeroysoft/gpuflo/issues/5)
+- [Set sampling, smoothing, and history semantics](https://github.com/mikeroysoft/gpuflo/issues/3)
+- [Prototype the responsive dashboard language](https://github.com/mikeroysoft/gpuflo/issues/7)
+- [Set the process overlay contract](https://github.com/mikeroysoft/gpuflo/issues/4)
+- [Inventory AMD telemetry sources and support](https://github.com/mikeroysoft/gpuflo/issues/8)
+- [AMD telemetry source research](https://github.com/mikeroysoft/gpuflo/blob/research/amd-telemetry-sources/research/amd-telemetry-sources.md)
+- [Identify the reusable code boundary](https://github.com/mikeroysoft/gpuflo/issues/2)
+- [Reuse boundary research](https://github.com/mikeroysoft/gpuflo/blob/research/reuse-boundary/research/reuse-boundary.md)

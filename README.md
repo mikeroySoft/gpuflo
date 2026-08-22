@@ -1,8 +1,8 @@
-# gruflo
+# gpuflo
 
 *Power in, tokens out.*
 
-gruflo is a small, strictly local, read-only terminal instrument for Linux
+gpuflo is a small, strictly local, read-only terminal instrument for Linux
 hosts with AMD GPUs on the `amdgpu` driver. Within one second of starting it
 answers three questions about the selected physical GPU:
 
@@ -20,7 +20,7 @@ never a score. Missing telemetry is shown as its exact reason, never as zero.
 - Linux
 - at least one AMD PCI/DRM device bound to the `amdgpu` driver
 
-That is all. gruflo reads kernel sysfs, hwmon, and the versioned
+That is all. gpuflo reads kernel sysfs, hwmon, and the versioned
 `gpu_metrics` interface directly. It does **not** require ROCm userspace,
 the AMD SMI library, `/dev/kfd`, membership in `render`/`video`, root, or
 network access, and it never writes to GPU or driver state.
@@ -30,24 +30,24 @@ network access, and it never writes to GPU or driver state.
 From a GitHub release archive:
 
 ```sh
-tar -xzf gruflo-vX.Y.Z-x86_64-unknown-linux-gnu.tar.gz
-./gruflo
+tar -xzf gpuflo-vX.Y.Z-x86_64-unknown-linux-gnu.tar.gz
+./gpuflo
 ```
 
 Verify the download against the published `SHA256SUMS`. From crates.io:
 
 ```sh
-cargo install gruflo
+cargo install gpuflo
 ```
 
-To uninstall, delete the binary (or `cargo uninstall gruflo`) and remove the
-optional state file `~/.local/state/gruflo/daily.json` and config file
-`~/.config/gruflo/config.toml` if you created one. Installation never
+To uninstall, delete the binary (or `cargo uninstall gpuflo`) and remove the
+optional state file `~/.local/state/gpuflo/daily.json` and config file
+`~/.config/gpuflo/config.toml` if you created one. Installation never
 configures the host: no groups, udev rules, services, or driver changes.
 
 ## Use
 
-`gruflo` starts the interactive instrument. Keys:
+`gpuflo` starts the interactive instrument. Keys:
 
 | Key | Action |
 | --- | --- |
@@ -63,7 +63,7 @@ The full selected-GPU instrument cluster is called **mode**. The layout
 adapts to the terminal: mode ≥ 72×34, compact ≥ 62×17, mini ≥ 48×11, and a
 one-line tiny surface below that.
 
-Non-interactive output modes (see `gruflo --help` for the authoritative
+Non-interactive output modes (see `gpuflo --help` for the authoritative
 reference):
 
 | Flag | Behavior |
@@ -84,13 +84,13 @@ Every metric is either a value with its source observation time or exactly
 one explicit state: `unsupported_hardware`, `unsupported_driver_version`,
 `permission_denied`, `asleep`, `reported_by_primary_partition`, `stale`, or
 `source_error`. Physical GPUs own socket-scoped power and temperature; XCP
-partitions own partition-scoped activity, memory, and clocks. gruflo never
+partitions own partition-scoped activity, memory, and clocks. gpuflo never
 synthesizes aggregate utilization or double-counts socket observations.
 
 ## Configuration
 
-`$XDG_CONFIG_HOME/gruflo/config.toml` (fallback
-`~/.config/gruflo/config.toml`) is optional and normally absent. The
+`$XDG_CONFIG_HOME/gpuflo/config.toml` (fallback
+`~/.config/gpuflo/config.toml`) is optional and normally absent. The
 complete key set:
 
 ```toml
@@ -104,21 +104,21 @@ non-empty `NO_COLOR` environment variable disables color unconditionally.
 Session `t`/`m` changes never rewrite the file. Visual configuration never
 changes machine or non-interactive output semantics.
 
-gruflo persists one small daily summary (per-GPU activity/memory peaks and
+gpuflo persists one small daily summary (per-GPU activity/memory peaks and
 energy, when the source exposes an energy counter) at
-`$XDG_STATE_HOME/gruflo/daily.json` (fallback
-`~/.local/state/gruflo/daily.json`). Raw samples are never stored.
+`$XDG_STATE_HOME/gpuflo/daily.json` (fallback
+`~/.local/state/gpuflo/daily.json`). Raw samples are never stored.
 
 ## Optional sources
 
-- **AMD SMI enrichment.** When `libamd_smi.so` is present, gruflo loads it
+- **AMD SMI enrichment.** When `libamd_smi.so` is present, gpuflo loads it
   at runtime to fill fields the kernel interfaces do not expose. A fresh
   kernel observation is never overwritten by AMD SMI, and a missing or
   incompatible library only disables enrichment.
 - **Process overlay** (`p`). Shows PID, permitted process name, GPU
   association, DRM fdinfo resident memory, separately labelled KFD memory
   accounting, and container identity. The kernel exposes no per-process GPU
-  utilization for HIP workloads, so gruflo makes no such claim; the two
+  utilization for HIP workloads, so gpuflo makes no such claim; the two
   memory accountings differ by design and are not reconciled. Reading other
   users' attribution requires elevated permissions; affected fields report
   `permission denied` instead of being hidden.
@@ -140,5 +140,5 @@ cargo build --release
 cargo test
 ```
 
-Rust 1.96 or newer. The `gruflo` library target exposes the canonical model
+Rust 1.96 or newer. The `gpuflo` library target exposes the canonical model
 and the `Monitor` interface for reuse; everything else is private.

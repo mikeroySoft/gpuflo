@@ -1,10 +1,10 @@
-# Gruflo Production Implementation Handoff
+# Gpuflo Production Implementation Handoff
 
 ## Mission
 
-Build the production implementation of **gruflo** from the completed Wayfinder product and architecture specification.
+Build the production implementation of **gpuflo** from the completed Wayfinder product and architecture specification.
 
-Gruflo is a small, read-only, local Rust instrument for Linux `amdgpu` hosts. Within one second it must answer:
+Gpuflo is a small, read-only, local Rust instrument for Linux `amdgpu` hosts. Within one second it must answer:
 
 1. What is the selected physical AMD GPU doing?
 2. How much applicable GPU memory is occupied?
@@ -14,8 +14,8 @@ The Wayfinder effort is complete. All decision tickets and the canonical map are
 
 ## Repository state
 
-- Repository: `https://github.com/michaelroy-amd/gruflo.git`
-- Main checkout used for this handoff: `/home/miroy/git/gruflo`
+- Repository: `https://github.com/mikeroysoft/gpuflo.git`
+- Main checkout used for this handoff: `/home/miroy/git/gpuflo`
 - Branch: `main`
 - Published head: `0e34de3` (`research: apply live process attribution findings`)
 - `main` matches `origin/main`.
@@ -30,19 +30,19 @@ Create implementation work on an isolated feature branch/worktree. Keep `main` a
 Read these before planning or editing:
 
 1. `CONTEXT.md` — canonical domain glossary.
-2. `docs/superpowers/specs/2026-08-20-gruflo-metric-health-design.md`
-3. `docs/superpowers/specs/2026-08-20-gruflo-machine-readable-output-design.md`
-4. `docs/superpowers/specs/2026-08-20-gruflo-capability-failure-design.md`
-5. `docs/superpowers/specs/2026-08-20-gruflo-rust-architecture-design.md`
-6. `docs/superpowers/specs/2026-08-20-gruflo-validation-release-design.md`
-7. `docs/superpowers/specs/2026-08-20-gruflo-packaging-release-design.md`
-8. `docs/superpowers/specs/2026-08-20-gruflo-presentation-configuration-design.md`
+2. `docs/superpowers/specs/2026-08-20-gpuflo-metric-health-design.md`
+3. `docs/superpowers/specs/2026-08-20-gpuflo-machine-readable-output-design.md`
+4. `docs/superpowers/specs/2026-08-20-gpuflo-capability-failure-design.md`
+5. `docs/superpowers/specs/2026-08-20-gpuflo-rust-architecture-design.md`
+6. `docs/superpowers/specs/2026-08-20-gpuflo-validation-release-design.md`
+7. `docs/superpowers/specs/2026-08-20-gpuflo-packaging-release-design.md`
+8. `docs/superpowers/specs/2026-08-20-gpuflo-presentation-configuration-design.md`
 9. `research/process-attribution/results/20260821T181207370038903Z/` — live HIP process-attribution evidence.
 10. `docs/superpowers/specs/2026-08-20-process-attribution-capture-harness-design.md` only when maintaining the research harness; it is not a production architecture input.
 
 Tracker context remains available in the closed canonical map:
 
-- <https://github.com/michaelroy-amd/gruflo/issues/1>
+- <https://github.com/mikeroysoft/gpuflo/issues/1>
 
 Detailed research remains on published branches:
 
@@ -53,7 +53,7 @@ Detailed research remains on published branches:
 
 The approved throwaway Ratatui prototype is not on `main`:
 
-- Worktree: `/home/miroy/.config/superpowers/worktrees/gruflo/responsive-dashboard`
+- Worktree: `/home/miroy/.config/superpowers/worktrees/gpuflo/responsive-dashboard`
 - Branch: `prototype/responsive-dashboard`
 - Approved commit: `699a425`
 - Main implementation reference: `src/main.rs`
@@ -61,7 +61,7 @@ The approved throwaway Ratatui prototype is not on `main`:
 Use it for visual behavior only:
 
 - warm Buffalo palette;
-- centered full `mode` with six-row GRUFLO logo;
+- centered full `mode` with six-row GPUFLO logo;
 - exact tagline `Power in, tokens out.`;
 - responsive mode/compact/mini/tiny composition;
 - arrow-key GPU selection;
@@ -134,7 +134,7 @@ Live HIP evidence settled the initial claim:
 
 ### Architecture
 
-One Cargo package named `gruflo`, with library and binary targets; no workspace.
+One Cargo package named `gpuflo`, with library and binary targets; no workspace.
 
 Normative module tree:
 
@@ -166,10 +166,10 @@ All AMD SMI `unsafe`, symbol loading, ABI checks, handles, C conversion, and shu
 Sparse user-owned TOML:
 
 ```text
-$XDG_CONFIG_HOME/gruflo/config.toml
+$XDG_CONFIG_HOME/gpuflo/config.toml
 ```
 
-fallback `~/.config/gruflo/config.toml`. Normal file is blank; defaults remain in code. Initial TOML keys are only:
+fallback `~/.config/gpuflo/config.toml`. Normal file is blank; defaults remain in code. Initial TOML keys are only:
 
 ```toml
 theme = "buffalo"       # buffalo | nord | monochrome
@@ -232,7 +232,7 @@ On qualified hardware, first useful output must be within one second, fast kerne
 Initial channels:
 
 1. GitHub Release archive for qualified `x86_64-unknown-linux-gnu`.
-2. The same package on crates.io for `cargo install gruflo` and library reuse.
+2. The same package on crates.io for `cargo install gpuflo` and library reuse.
 
 One SemVer version covers source, package, binary, crate, tag, archive, and validation evidence. No initial Cargo feature matrix, distro packages, musl claim, AArch64 binary without live qualification, installer, man pages, completions, self-update, or bundled ROCm.
 
@@ -285,15 +285,15 @@ The handoff is complete only when:
 ## Ready-to-paste prompt
 
 ```text
-Continue gruflo from the completed Wayfinder effort and build the production implementation end to end.
+Continue gpuflo from the completed Wayfinder effort and build the production implementation end to end.
 
-Repository: https://github.com/michaelroy-amd/gruflo.git
+Repository: https://github.com/mikeroysoft/gpuflo.git
 Baseline: main at or after 0e34de3
-Authoritative handoff: docs/superpowers/handoffs/2026-08-21-gruflo-production-implementation.md
+Authoritative handoff: docs/superpowers/handoffs/2026-08-21-gpuflo-production-implementation.md
 
 First read the entire handoff, CONTEXT.md, every canonical specification it lists, the live process-attribution result, and the approved Ratatui prototype at commit 699a425. The closed Wayfinder map is context only; do not reopen settled product decisions.
 
-Then create an isolated feature branch/worktree, write a production implementation plan under docs/superpowers/plans/, and execute that plan fully. Do not stop after planning. Build the single-package Rust library+binary architecture exactly as specified, implement kernel-first telemetry with optional runtime AMD SMI, the canonical observation/reducer model, bounded monitor lanes, output modes, sparse configuration, persistence, terminal restoration, process overlay, and the approved responsive Ratatui UI. Keep gruflo strictly local and read-only. Preserve explicit unavailable states and physical-GPU/XCP scope. Use mode, never legacy terminology, for the full instrument cluster.
+Then create an isolated feature branch/worktree, write a production implementation plan under docs/superpowers/plans/, and execute that plan fully. Do not stop after planning. Build the single-package Rust library+binary architecture exactly as specified, implement kernel-first telemetry with optional runtime AMD SMI, the canonical observation/reducer model, bounded monitor lanes, output modes, sparse configuration, persistence, terminal restoration, process overlay, and the approved responsive Ratatui UI. Keep gpuflo strictly local and read-only. Preserve explicit unavailable states and physical-GPU/XCP scope. Use mode, never legacy terminology, for the full instrument cluster.
 
 Follow the minimal validation contract rather than inventing a huge test matrix. Run the actual binary and PTY/TUI paths, perform required code review, fix findings, and continue until every definition-of-done item in the handoff is satisfied. Commit coherent increments, push the branch, and produce a ready-to-merge PR with exact build/test/smoke evidence. Ask me only for a genuine unresolved contradiction or an external credential/hardware prerequisite; otherwise make the conservative boring decision and keep executing.
 ```

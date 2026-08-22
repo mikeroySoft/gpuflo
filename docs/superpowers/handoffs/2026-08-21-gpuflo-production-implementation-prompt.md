@@ -1,13 +1,13 @@
-# Gruflo Production Implementation Prompt
+# Gpuflo Production Implementation Prompt
 
 ```text
-Continue gruflo from the completed Wayfinder effort and build the production
+Continue gpuflo from the completed Wayfinder effort and build the production
 implementation end to end.
 
-Repository: https://github.com/michaelroy-amd/gruflo.git
+Repository: https://github.com/mikeroysoft/gpuflo.git
 Baseline: main at or after c761200
 Authoritative handoff:
-docs/superpowers/handoffs/2026-08-21-gruflo-production-implementation.md
+docs/superpowers/handoffs/2026-08-21-gpuflo-production-implementation.md
 
 First read the entire handoff, CONTEXT.md, every canonical specification it
 lists, the live process-attribution result, and the approved Ratatui prototype
@@ -21,7 +21,7 @@ architecture exactly as specified, implement kernel-first telemetry with
 optional runtime AMD SMI, the canonical observation/reducer model, bounded
 monitor lanes, output modes, sparse configuration, persistence, terminal
 restoration, process overlay, and the approved responsive Ratatui UI. Keep
-gruflo strictly local and read-only. Preserve explicit unavailable states and
+gpuflo strictly local and read-only. Preserve explicit unavailable states and
 physical-GPU/XCP scope. Use mode for the full instrument cluster.
 
 Follow the minimal validation contract rather than inventing a huge test

@@ -1,4 +1,4 @@
-//! gruflo — read-only AMD GPU instrument library.
+//! gpuflo — read-only AMD GPU instrument library.
 //!
 //! Only the canonical model types re-exported here and the narrow
 //! [`Monitor`] interface are semver-supported. Everything else is private
@@ -29,7 +29,7 @@ pub use monitor::{
     ReceiveTimeoutError, ShutdownError, StartError,
 };
 
-/// Binary glue entrypoint: runs gruflo from process arguments and
+/// Binary glue entrypoint: runs gpuflo from process arguments and
 /// environment, returning the exit code. Public only for `src/main.rs`;
 /// excluded from the supported reuse interface.
 pub fn run_from_env() -> u8 {
