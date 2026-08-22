@@ -637,6 +637,9 @@ fn render_health(frame: &mut Frame<'_>, view: &View<'_>, area: Rect) {
     let styler = &view.styler;
     let palette = styler.palette;
     let health = &view.gpu.health;
+    if health.category.as_str() == "none" {
+        return;
+    }
     if health.category.as_str() == "throttle"
         && health.message.to_ascii_lowercase().contains("thermal")
     {

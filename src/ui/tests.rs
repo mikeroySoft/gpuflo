@@ -199,8 +199,8 @@ fn mode_frame_shows_logo_tagline_health_and_selection() {
     );
     assert!(text.contains("Power in, tokens out."), "tagline missing");
     assert!(
-        text.contains("no active limits or faults"),
-        "health sentence missing"
+        !text.contains("no active limits or faults"),
+        "normal health must leave the main health row empty"
     );
     assert!(text.contains("▶"), "selection marker missing");
     assert!(text.contains("MI300X"), "selected GPU label missing");
@@ -217,7 +217,7 @@ fn compact_frame_shows_panels_health_and_selection() {
     let text = buffer_text(&render(&state, 80, 24));
     assert!(text.contains("GPU activity"));
     assert!(text.contains("Memory occupancy"));
-    assert!(text.contains("no active limits or faults"));
+    assert!(!text.contains("no active limits or faults"));
     assert!(text.contains("▶"));
     assert!(!text.contains("██████╗"), "compact must omit the logo");
 }
@@ -299,7 +299,7 @@ fn no_color_keeps_distinctions_without_any_styling() {
     let buffer = render(&state, 120, 40);
     let text = buffer_text(&buffer);
     assert!(text.contains("▶"), "selection must survive textually");
-    assert!(text.contains("no active limits or faults"));
+    assert!(!text.contains("no active limits or faults"));
     for y in 0..buffer.area.height {
         for x in 0..buffer.area.width {
             let cell = buffer.cell((x, y)).expect("cell");
@@ -612,6 +612,16 @@ fn thermal_throttle_is_detail_only() {
     assert!(detail.contains("thermal throttle active"));
 }
 
+#[test]
+fn active_fault_still_renders_on_main_screen() {
+    let mut state = state_with_model(true);
+    let mut fault = model();
+    fault.snapshot.gpus[0].health.category = HealthCategory::FAULT;
+    fault.snapshot.gpus[0].health.message = "2 uncorrectable ECC errors".to_owned();
+    let _ = state.adopt_model(fault);
+    let main = buffer_text(&render(&state, 120, 40));
+    assert!(main.contains("2 uncorrectable ECC errors"));
+}
 #[test]
 fn compact_header_uses_only_supported_glyphs() {
     let state = state_with_model(true);
