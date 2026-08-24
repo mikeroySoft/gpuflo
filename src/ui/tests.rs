@@ -23,7 +23,7 @@ use crate::source::process::ProcessRow;
 use crate::state::{ProcessOverlay, RenderGpu, RenderModel};
 
 use super::layout::{self, Surface};
-use super::{Action, UiState, format, widgets};
+use super::{Action, FRAME_INTERVAL, UiState, format, widgets};
 
 const GIB: u64 = 1024 * 1024 * 1024;
 
@@ -197,7 +197,11 @@ fn mode_frame_shows_logo_tagline_health_and_selection() {
         text.contains("██████╗ ██████╗ ██╗   ██╗███████╗██╗      ██████╗"),
         "logo row missing"
     );
-    assert!(text.contains("Power in, tokens out."), "tagline missing");
+    assert!(
+        text.contains("██║   ██║██╔═══╝ ██║   ██║██╔══╝"),
+        "GPUFLO P glyph missing"
+    );
+    assert!(text.contains(state.tagline), "selected tagline missing");
     assert!(
         !text.contains("no active limits or faults"),
         "normal health must leave the main health row empty"
@@ -209,6 +213,19 @@ fn mode_frame_shows_logo_tagline_health_and_selection() {
         text.contains("hotspot 74 / 95°C"),
         "support row missing: {text}"
     );
+}
+
+#[test]
+fn launch_tagline_remains_stable_across_frames() {
+    let mut state = state_with_model(true);
+    let launch_tagline = state.tagline;
+    let first = buffer_text(&render(&state, 120, 40));
+    state.animate(FRAME_INTERVAL.as_secs_f64());
+    let second = buffer_text(&render(&state, 120, 40));
+
+    assert_eq!(state.tagline, launch_tagline);
+    assert!(first.contains(launch_tagline));
+    assert!(second.contains(launch_tagline));
 }
 
 #[test]

@@ -9,6 +9,7 @@
 
 mod format;
 mod layout;
+mod taglines;
 mod theme;
 mod widgets;
 
@@ -141,6 +142,8 @@ pub(super) struct UiState {
     mode_preference: ModePreference,
     color_enabled: bool,
     truecolor: bool,
+    /// Chosen once at launch and retained for the whole interactive session.
+    tagline: &'static str,
     model: Option<RenderModel>,
     /// Selection tracks the stable physical GPU identity, never an index.
     selected: Option<PhysicalGpuId>,
@@ -168,6 +171,7 @@ impl UiState {
             mode_preference: presentation.mode_preference,
             color_enabled: presentation.color_enabled,
             truecolor: presentation.truecolor,
+            tagline: taglines::select(),
             model: None,
             selected: None,
             selected_position: 0,

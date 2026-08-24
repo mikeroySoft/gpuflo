@@ -21,18 +21,15 @@ use super::layout::{self, Surface};
 use super::theme::Styler;
 use super::{UiState, primary_partition};
 
-/// Approved six-row block logo, verbatim from the prototype.
+/// Six-row GPUFLO block logo.
 const LOGO: [&str; 6] = [
     " ██████╗ ██████╗ ██╗   ██╗███████╗██╗      ██████╗ ",
     "██╔════╝ ██╔══██╗██║   ██║██╔════╝██║     ██╔═══██╗",
     "██║  ███╗██████╔╝██║   ██║█████╗  ██║     ██║   ██║",
-    "██║   ██║██╔══██╗██║   ██║██╔══╝  ██║     ██║   ██║",
-    "╚██████╔╝██║  ██║╚██████╔╝██║     ███████╗╚██████╔╝",
-    " ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚═╝     ╚══════╝ ╚═════╝ ",
+    "██║   ██║██╔═══╝ ██║   ██║██╔══╝  ██║     ██║   ██║",
+    "╚██████╔╝██║     ╚██████╔╝██║     ███████╗╚██████╔╝",
+    " ╚═════╝ ╚═╝      ╚═════╝ ╚═╝     ╚══════╝ ╚═════╝ ",
 ];
-
-/// Approved tagline, exact.
-const TAGLINE: &str = "Power in, tokens out.";
 
 /// Centered line shown while no AMD GPU is discoverable.
 const NO_GPU: &str = "no AMD GPU currently detected";
@@ -139,7 +136,7 @@ fn render_mode(frame: &mut Frame<'_>, view: &View<'_>, area: Rect) {
 
     render_logo(frame, view, rows[0]);
     frame.render_widget(
-        Paragraph::new(TAGLINE)
+        Paragraph::new(view.state.tagline)
             .alignment(Alignment::Center)
             .style(view.styler.fg(view.styler.palette.muted)),
         rows[1],
