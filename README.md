@@ -59,6 +59,21 @@ Optional sources add information when available. Their absence never prevents ke
 cargo install gpuflo --locked
 ```
 
+### Prebuilt binary (no Rust toolchain)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/mikeroySoft/gpuflo/main/install.sh | sh
+```
+
+The script downloads the latest `x86_64-unknown-linux-gnu` release archive
+from GitHub, verifies its SHA-256 checksum, and installs the single binary
+into `~/.local/bin` (override with `GPUFLO_INSTALL_DIR`). It never uses root
+and never modifies groups, udev rules, services, or GPU settings.
+
+The same archives can be downloaded and verified manually from the
+[releases page](https://github.com/mikeroySoft/gpuflo/releases); each release
+ships `SHA256SUMS`, a GLIBC baseline report, and its validation manifest.
+
 ### Build and install from source
 
 Rust 1.96 or newer is required.

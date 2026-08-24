@@ -18,6 +18,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
         with:
           components: rustfmt, clippy
@@ -53,8 +55,14 @@ jobs:
             || { echo "${MANIFEST} does not authorize a qualified release"; exit 1; }
           grep -Fx -- "- Version: ${PACKAGE_VERSION}" "${MANIFEST}" \
             || { echo "${MANIFEST} version does not match"; exit 1; }
-          grep -Fx -- "- Commit: ${GITHUB_SHA}" "${MANIFEST}" \
-            || { echo "${MANIFEST} commit does not match tag checkout"; exit 1; }
+          # The manifest names the commit whose code was validated. The
+          # manifest commit itself may follow it, so require that the tagged
+          # tree is identical to the validated tree outside validation/.
+          VALIDATED="$(sed -n 's/^- Commit: \([0-9a-f]\{40\}\)$/\1/p' "${MANIFEST}")"
+          test -n "${VALIDATED}" \
+            || { echo "${MANIFEST} does not name a validated commit"; exit 1; }
+          git diff --quiet "${VALIDATED}" "${GITHUB_SHA}" -- . ':(exclude)validation' \
+            || { echo "tagged tree differs from validated ${VALIDATED} outside validation/"; exit 1; }
           NAME="gpuflo-${VERSION}-x86_64-unknown-linux-gnu"
           mkdir staging
           cp target/x86_64-unknown-linux-gnu/release/gpuflo \
