@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GPUFlo — a light, fast terminal dashboard for AMD GPUs on Linux</title>
+<meta name="description" content="GPUFlo is a light, fast, accurate terminal dashboard for AMD GPUs on Linux — no ROCm, no root, no daemon. Extensible via NDJSON and an embeddable Rust library.">
+<style>
+  :root{
+    --bg:#0d0c0a; --bg2:#151310; --panel:#1a1712; --line:#3a2f1e;
+    --cream:#f0e2c8; --amber:#f5a623; --orange:#e07b39; --rust:#c05a2a;
+    --dim:#8a7a5e; --dimmer:#5a4f3c;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--cream);font-family:"JetBrains Mono","Fira Code",ui-monospace,monospace;line-height:1.6}
+  a{color:var(--amber);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:980px;margin:0 auto;padding:0 24px}
+
+  nav{display:flex;justify-content:space-between;align-items:center;padding:20px 0;border-bottom:1px solid var(--line)}
+  nav .brand{font-weight:700;letter-spacing:.08em}
+  nav .brand span{color:var(--amber)}
+  nav .links a{margin-left:22px;color:var(--dim);font-size:14px}
+  nav .links a:hover{color:var(--amber);text-decoration:none}
+
+  header{padding:72px 0 40px;text-align:center}
+  .logo{
+    font-size:clamp(52px,9vw,96px);font-weight:800;letter-spacing:.04em;line-height:1;
+    background:linear-gradient(180deg,#f6ead0 0%,#f0cf8e 30%,var(--amber) 55%,var(--orange) 80%,var(--rust) 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 0 24px rgba(245,166,35,.25));
+  }
+  .tag{margin-top:14px;color:var(--dim);font-size:16px}
+  .tag em{color:var(--cream);font-style:normal}
+
+  .install{margin:40px auto 0;max-width:640px;text-align:left}
+  .install .label{font-size:12px;color:var(--dimmer);text-transform:uppercase;letter-spacing:.2em;margin-bottom:8px}
+  .cmd{display:flex;align-items:center;justify-content:space-between;gap:12px;
+    background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px 18px;margin-bottom:10px}
+  .cmd code{color:var(--cream);font-size:15px}
+  .cmd code .p{color:var(--rust)}
+  .cmd button{background:none;border:1px solid var(--line);border-radius:6px;color:var(--dim);
+    font:inherit;font-size:12px;padding:4px 10px;cursor:pointer}
+  .cmd button:hover{color:var(--amber);border-color:var(--amber)}
+  .install .note{font-size:13px;color:var(--dimmer)}
+  .install .note a{color:var(--dim)}
+
+  .term{margin:64px auto 0;max-width:860px;background:#0a0908;border:1px solid var(--line);
+    border-radius:12px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.6),0 0 60px rgba(245,166,35,.06)}
+  .term .bar{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg2);border-bottom:1px solid var(--line)}
+  .term .bar::before{content:"$";color:var(--rust);font-weight:700}
+  .term .bar span{margin-left:10px;color:var(--dimmer);font-size:12px}
+  .term .body{padding:22px 26px;font-size:14px}
+  .gpu-strip{display:inline-block;background:var(--amber);color:#0d0c0a;font-weight:700;padding:2px 12px;margin-bottom:16px}
+  .sect{color:var(--cream);margin:10px 0 4px}
+  .sect .val{color:var(--amber)} .sect .peak{float:right;color:var(--dim)}
+  canvas{display:block;width:100%;height:110px;border:1px solid var(--line);border-radius:4px;margin-bottom:14px;background:#0d0c0a}
+  .stats{margin-top:6px;color:var(--cream);text-align:center}
+  .stats b{color:var(--amber);font-weight:400}
+  .keys{margin-top:12px;color:var(--dimmer);font-size:12px;text-align:center}
+
+  section{padding:80px 0 0}
+  h2{font-size:14px;color:var(--amber);text-transform:uppercase;letter-spacing:.25em;margin-bottom:28px}
+  h2::before{content:"// ";color:var(--dimmer)}
+  .lead{font-size:20px;max-width:760px;color:var(--cream)}
+  .lead b{color:var(--amber);font-weight:600}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px;margin-top:32px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:22px}
+  .card h3{font-size:15px;color:var(--amber);margin-bottom:8px;font-weight:600}
+  .card p{font-size:13.5px;color:var(--dim)}
+  .card p code{color:var(--cream);background:var(--bg2);padding:1px 5px;border-radius:3px;font-size:12.5px}
+
+  .qa{margin-top:32px;counter-reset:q}
+  .qa div{display:flex;gap:20px;padding:20px 0;border-top:1px solid var(--line);font-size:17px}
+  .qa div::before{counter-increment:q;content:counter(q);color:var(--rust);font-size:32px;font-weight:800;line-height:1}
+
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:32px}
+  @media(max-width:820px){.cols{grid-template-columns:1fr}}
+  pre{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:20px;overflow-x:auto;font-size:12.5px;line-height:1.55}
+  pre .c{color:var(--dimmer)} pre .k{color:var(--orange)} pre .s{color:#c9b458} pre .f{color:var(--amber)}
+  .cols h3{font-size:14px;color:var(--cream);margin-bottom:10px}
+
+  footer{margin-top:100px;padding:40px 0 60px;border-top:1px solid var(--line);color:var(--dimmer);font-size:13px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav>
+    <div class="brand">GPU<span>FLO</span></div>
+    <div class="links">
+      <a href="#what">What it does</a><a href="#extend">Extend</a>
+      <a href="https://crates.io/crates/gpuflo">crates.io</a>
+      <a href="https://github.com/mikeroySoft/gpuflo">GitHub</a>
+    </div>
+  </nav>
+
+  <header>
+    <div class="logo">GPUFLO</div>
+    <p class="tag">A <em>light, fast</em> terminal dashboard for AMD GPUs on Linux.</p>
+
+    <div class="install">
+      <div class="label">Install</div>
+      <div class="cmd"><code><span class="p">$</span> cargo install gpuflo --locked</code><button data-c="cargo install gpuflo --locked">copy</button></div>
+      <div class="cmd"><code><span class="p">$</span> curl -fsSL https://raw.githubusercontent.com/mikeroySoft/gpuflo/main/install.sh | sh</code><button data-c="curl -fsSL https://raw.githubusercontent.com/mikeroySoft/gpuflo/main/install.sh | sh">copy</button></div>
+      <p class="note">No ROCm. No root. No daemon. Just Linux and the in-kernel <a href="#what">amdgpu</a> driver. Checksums on every <a href="https://github.com/mikeroySoft/gpuflo/releases">release</a>.</p>
+    </div>
+  </header>
+
+  <div class="term">
+    <div class="bar"><span>gpuflo — 96×32</span></div>
+    <div class="body">
+      <div style="text-align:center"><span class="gpu-strip">▶ AMD Radeon AI PRO R9700&nbsp;&nbsp;<span id="strip-act">6</span>%</span></div>
+      <div class="sect">GPU activity&nbsp;&nbsp;<span class="val"><span id="act">6</span>% →</span><span class="peak">peak: <span id="peak">37</span>%</span></div>
+      <canvas id="cv-act" width="1600" height="220"></canvas>
+      <div class="sect">Memory occupancy&nbsp;&nbsp;<span class="val"><span id="mem">24.9</span> / 32 GiB · <span id="memp">78</span>%</span><span class="peak">VRAM</span></div>
+      <canvas id="cv-mem" width="1600" height="150"></canvas>
+      <div class="stats">hotspot <b><span id="temp">54</span> / 110°C</b> &nbsp;·&nbsp; power <b><span id="pow">47</span> / 300 W</b> &nbsp;·&nbsp; GFX <b><span id="clk">1113</span> MHz</b></div>
+      <div class="keys">←/→ GPU · t buffalo · m mode · p processes · d detail · ? help · q quit</div>
+    </div>
+  </div>
+
+  <section id="what">
+    <h2>Three questions, one second</h2>
+    <p class="lead">GPUFlo reads Linux <b>amdgpu</b> kernel interfaces directly — sysfs, hwmon, versioned <b>gpu_metrics</b>, DRM fdinfo — and answers immediately:</p>
+    <div class="qa">
+      <div>What is the selected physical GPU doing?</div>
+      <div>How much of its applicable memory pool is occupied?</div>
+      <div>Is a source-backed fault, throttle, limit, pressure, sleep, permission, or telemetry problem active?</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Light, fast, accurate</h2>
+    <div class="grid">
+      <div class="card"><h3>Light</h3><p>One small static binary, strictly read-only. No ROCm userspace, no root, no daemon, no database, no network. Optional sources only ever add information.</p></div>
+      <div class="card"><h3>Fast</h3><p>First reading in under a second. Telemetry samples on a dedicated 250 ms kernel lane that rendering, overlays, and process scans can never block.</p></div>
+      <div class="card"><h3>Accurate</h3><p>Socket-scoped temperature and power kept separate from partition-scoped activity, memory, and clocks. Missing telemetry is an explicit state — <code>stale</code>, <code>asleep</code>, <code>permission_denied</code> — never a made-up zero.</p></div>
+      <div class="card"><h3>Extensible &amp; embeddable</h3><p>Stream <code>--json</code> / <code>--json-stream</code> NDJSON into scripts, or embed the semver-supported Rust <code>Monitor</code> API — the same canonical model that drives the TUI.</p></div>
+      <div class="card"><h3>Responsive views</h3><p>Full <code>mode</code>, <code>compact</code>, <code>mini</code>, and one-line <code>tiny</code> views auto-select by terminal size. Works as a floating desktop widget.</p></div>
+      <div class="card"><h3>Process attribution</h3><p>Press <code>p</code>: PID, name, GPU/XCP, VRAM, GTT, KFD memory, and container identity — permission failures shown explicitly rather than hidden.</p></div>
+    </div>
+  </section>
+
+  <section id="extend">
+    <h2>Extend it</h2>
+    <p class="lead">The same canonical telemetry model drives the TUI, a stable <b>JSON/NDJSON contract</b> for scripts and pipelines, and a semver-supported <b>Rust library</b> for embedding.</p>
+    <div class="cols">
+      <div>
+        <h3>Stream NDJSON into anything</h3>
+<pre><span class="c"># one snapshot, or a continuous stream</span>
+<span class="f">gpuflo</span> --json
+<span class="f">gpuflo</span> --json-stream | jq .gpus[0].activity
+
+<span class="c"># never null, NaN, or fake zero:</span>
+{ <span class="s">"value"</span>: 97.0,
+  <span class="s">"observed_at"</span>: <span class="s">"2026-08-21T23:45:12Z"</span> }
+{ <span class="s">"state"</span>: <span class="s">"permission_denied"</span> }</pre>
+      </div>
+      <div>
+        <h3>Embed the Monitor in Rust</h3>
+<pre><span class="k">use</span> gpuflo::{Monitor, MonitorEvent, MonitorOptions};
+
+<span class="k">let</span> monitor = Monitor::start(MonitorOptions::new())?;
+<span class="k">match</span> monitor.receive()? {
+    MonitorEvent::Snapshot(s) =&gt;
+        <span class="f">println!</span>(<span class="s">"{} GPU(s)"</span>, s.gpus.len()),
+    MonitorEvent::Fatal(e) =&gt; <span class="k">return</span> Err(e.into()),
+    _ =&gt; {}
+}</pre>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>MIT licensed · no telemetry upload, ever</span>
+    <span><a href="https://github.com/mikeroySoft/gpuflo">github.com/mikeroySoft/gpuflo</a></span>
+  </footer>
+</div>
+
+<script>
+document.querySelectorAll('.cmd button').forEach(b=>b.onclick=()=>{navigator.clipboard.writeText(b.dataset.c);b.textContent='copied';setTimeout(()=>b.textContent='copy',1200)});
+
+// dot-matrix animated graphs, matching the TUI aesthetic
+const N=110;
+function dots(cv,color){const x=cv.getContext('2d');return(hist,fillTo)=>{
+  x.clearRect(0,0,cv.width,cv.height);
+  const sp=cv.width/N, dy=7;
+  for(let i=0;i<N;i++){
+    const v=fillTo!=null?fillTo:hist[i];
+    const h=Math.round(v/100*cv.height);
+    for(let y=cv.height-4;y>cv.height-h;y-=dy){
+      x.fillStyle=color(v,(cv.height-y)/cv.height);
+      x.beginPath();x.arc(i*sp+sp/2,y,1.9,0,7);x.fill();
+    }
+  }};}
+const actHist=Array(N).fill(5), memHist=Array(N).fill(78);
+let phase=0,t=0,peak=37,mem=78;
+const dAct=dots(document.getElementById('cv-act'),(v)=>v>70?'#f5a623':v>30?'#e07b39':'#a8642f');
+const dMem=dots(document.getElementById('cv-mem'),()=>'#c05a2a');
+function step(){
+  t++;
+  if(t%40===0)phase=(phase+1)%3;
+  const target=phase===0?6:phase===1?92:45;
+  const cur=actHist[N-1]+(target-actHist[N-1])*0.25+(Math.random()*8-4);
+  const a=Math.max(0,Math.min(100,cur));
+  actHist.push(a);actHist.shift();
+  peak=Math.max(peak,Math.round(a));
+  mem=Math.max(20,Math.min(95,mem+(Math.random()*1.6-0.8)+(phase===1?0.3:-0.15)));
+  memHist.push(mem);memHist.shift();
+  dAct(actHist); dMem(memHist);
+  const ar=Math.round(a);
+  act.textContent=ar; document.getElementById('strip-act').textContent=ar;
+  document.getElementById('peak').textContent=peak;
+  document.getElementById('mem').textContent=(mem/100*32).toFixed(1);
+  document.getElementById('memp').textContent=Math.round(mem);
+  temp.textContent=Math.round(48+a*0.22); pow.textContent=Math.round(28+a*2.4);
+  clk.textContent=Math.round(900+a*14);
+}
+const act=document.getElementById('act'),temp=document.getElementById('temp'),
+      pow=document.getElementById('pow'),clk=document.getElementById('clk');
+for(let i=0;i<N;i++)step();
+setInterval(step,250);
+</script>
+</body>
+</html>
