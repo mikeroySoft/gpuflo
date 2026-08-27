@@ -1,8 +1,8 @@
 //! Fixed CLI surface parsed with `lexopt`.
 //!
 //! Accepted options are exactly `--help`, `--version`, `--once`, `--json`,
-//! `--json-stream`, `--tiny`, `--gpu`, `--theme`, `--mode`, and `--no-color`.
-//! Contains no telemetry or product-state rules.
+//! `--json-stream`, `--tiny`, `--gpu`, `--theme`, `--mode`, `--no-color`, and
+//! `--cat`. Contains no telemetry or product-state rules.
 
 use std::ffi::OsString;
 
@@ -32,13 +32,14 @@ Visual options (interactive TUI only; stdout output is always ANSI-free):
   --theme <NAME>   buffalo | nord | monochrome
   --mode <NAME>    auto | mode | compact | mini | tiny
   --no-color       Disable color (a non-empty NO_COLOR does the same)
+  --cat            Show a sleeping ASCII cat when the selected GPU is warm
 
 Other:
   --help           Print this help
   --version        Print the version
 
 Configuration: $XDG_CONFIG_HOME/gpuflo/config.toml (fallback
-~/.config/gpuflo/config.toml) may set theme, mode, and no_color only.
+~/.config/gpuflo/config.toml) may set theme, mode, no_color, and cat only.
 CLI flags override the file. Exit codes: 0 success (including partial
 telemetry and broken pipe), 1 fatal runtime failure, 2 usage or
 configuration error, 130 interrupted.
@@ -95,6 +96,7 @@ pub(crate) struct CliOptions {
     pub theme: Option<Theme>,
     pub mode: Option<ModePreference>,
     pub no_color: bool,
+    pub cat: bool,
 }
 
 /// Complete parse result.
@@ -126,6 +128,7 @@ where
         theme: None,
         mode: None,
         no_color: false,
+        cat: false,
     };
 
     let set_output = |mode: OutputMode, current: &mut Option<OutputMode>| {
@@ -173,6 +176,7 @@ where
                 options.mode = Some(ModePreference::try_from(value).map_err(UsageError)?);
             }
             Long("no-color") => options.no_color = true,
+            Long("cat") => options.cat = true,
             other => {
                 return Err(UsageError(format!(
                     "unexpected argument: {}",
@@ -216,6 +220,7 @@ mod tests {
         assert_eq!(options.output, OutputMode::Interactive);
         assert_eq!(options.gpu, None);
         assert!(!options.no_color);
+        assert!(!options.cat);
     }
 
     #[test]
@@ -251,10 +256,18 @@ mod tests {
 
     #[test]
     fn visual_flags_parse_and_reject_unknown_values() {
-        let options = options(&["--theme", "nord", "--mode", "compact", "--no-color"]);
+        let options = options(&[
+            "--theme",
+            "nord",
+            "--mode",
+            "compact",
+            "--no-color",
+            "--cat",
+        ]);
         assert_eq!(options.theme, Some(Theme::Nord));
         assert_eq!(options.mode, Some(ModePreference::Compact));
         assert!(options.no_color);
+        assert!(options.cat);
         assert!(run(&["--theme", "solarized"]).is_err());
         assert!(run(&["--mode", "full"]).is_err());
     }
