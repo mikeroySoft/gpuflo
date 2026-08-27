@@ -1,0 +1,15 @@
+Reduced from a live Strix Halo (gfx1151) host observed during Strix Halo
+support work. Its KFD topology reports `heap_type 1` on the unified-memory
+bank -- the same value the existing discrete-GPU fixtures (discrete-spx,
+discrete-large-gtt, multi-xcp) use for dedicated VRAM. The PCI device ID
+`0x1586`, `local_mem_size 0`, and `gfx_target_version 110501` (gfx1151) are
+captured verbatim from the live node. `local_mem_size` is deliberately not
+used for classification because current Linux emits zero for discrete GPU
+nodes too. PCI BDF, mem_info byte counts' precision, and the gpu_metrics
+payload are synthesized/sanitized (real header: format 3, content 0,
+matching kgd_pp_interface.h's v3.0 layout). hwmon exposes only an `edge`
+label, matching the live host -- no `junction` channel, so hotspot stays
+unsupported_hardware by design.
+
+Guards the exact `0x1586` GTT-accounting override: without it, this device's
+real mem_info_gtt_total (~124 GiB) would be reported as a 512 MiB VRAM pool.

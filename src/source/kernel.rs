@@ -973,19 +973,19 @@ fn build_device(
         None => PhysicalGpuId::new(format!("gpu-{package_bdf}")),
     };
 
+    let device_id = std::fs::read_to_string(primary.device.join("device"))
+        .map(|s| safe_source_text(&s))
+        .unwrap_or_default();
+    let device_key = device_id
+        .strip_prefix("0x")
+        .unwrap_or(&device_id)
+        .to_ascii_lowercase();
     let name = std::fs::read_to_string(primary.device.join("product_name"))
         .ok()
         .map(|s| safe_source_text(&s))
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| {
-            let device_id = std::fs::read_to_string(primary.device.join("device"))
-                .map(|s| safe_source_text(&s))
-                .unwrap_or_default();
-            let key = device_id
-                .strip_prefix("0x")
-                .unwrap_or(&device_id)
-                .to_ascii_lowercase();
-            pci_names.get(&key).cloned().unwrap_or_else(|| {
+            pci_names.get(&device_key).cloned().unwrap_or_else(|| {
                 if device_id.is_empty() {
                     "AMD GPU".to_owned()
                 } else {
@@ -994,19 +994,24 @@ fn build_device(
             })
         });
 
-    // KFD heap topology is explicit physical-memory evidence. Without it,
-    // preserve an unknown-safe pool label rather than guessing APU/discrete
-    // from capacity; the stable VRAM nodes remain the conservative source.
+    // KFD heap topology is explicit physical-memory evidence. Strix Halo
+    // reports the same heap type as discrete GPUs despite exposing its
+    // applicable unified-memory accounting through GTT, so use its exact
+    // fixture-backed PCI ID rather than a capacity or product-name heuristic.
     let mut package_heaps: Vec<u64> = group
         .iter()
         .filter_map(|card| heap_types.get(&card.bdf).copied())
         .collect();
     package_heaps.sort_unstable();
     package_heaps.dedup();
-    let pool = match package_heaps.as_slice() {
-        [KFD_HEAP_FB_PUBLIC] => MemoryPool::GTT,
-        [KFD_HEAP_FB_PRIVATE] => MemoryPool::VRAM,
-        _ => MemoryPool::new("unknown"),
+    let pool = if device_key == "1586" {
+        MemoryPool::GTT
+    } else {
+        match package_heaps.as_slice() {
+            [KFD_HEAP_FB_PUBLIC] => MemoryPool::GTT,
+            [KFD_HEAP_FB_PRIVATE] => MemoryPool::VRAM,
+            _ => MemoryPool::new("unknown"),
+        }
     };
     let (used_node, total_node) = if pool == MemoryPool::GTT {
         ("mem_info_gtt_used", "mem_info_gtt_total")
@@ -1175,6 +1180,26 @@ mod tests {
         assert_eq!(part.mem_total_bytes, Reading::Value(17_179_869_184));
         // mem_busy_percent absent on this APU: structural absence.
         assert_eq!(part.mem_ctl_centipercent, Reading::Absent);
+    }
+
+    #[test]
+    fn strix_halo_uses_fixture_backed_gtt_accounting() {
+        let (mut source, devices) = source("apu-strix-halo");
+        let disc = &devices[0].disc;
+        assert_eq!(disc.pool, MemoryPool::GTT);
+        assert_eq!(disc.name, "AMD GPU 0x1586");
+        let sample = source.collect_fast(&devices[0]);
+        let part = &sample.partitions[0];
+        assert_eq!(part.mem_total_bytes, Reading::Value(133_143_986_176));
+        assert_eq!(part.mem_used_bytes, Reading::Value(19_224_829_952));
+        assert_eq!(part.activity_centipercent, Reading::Value(6_200));
+        assert_eq!(sample.socket_power_microwatts, Reading::Value(45_000_000));
+        assert_eq!(sample.hotspot_millic, Reading::Absent);
+        let slow = source.collect_slow(&devices[0]);
+        assert_eq!(
+            slow.partitions[0].gfx_clock_hz,
+            Reading::Value(2_800_000_000)
+        );
     }
 
     #[test]
