@@ -319,15 +319,52 @@ fn indep_reasons(indep: u64) -> Vec<&'static str> {
 const KFD_HEAP_FB_PRIVATE: u64 = 1;
 const KFD_HEAP_FB_PUBLIC: u64 = 2;
 
-/// Maps BDFs only when the complete KFD scan contains exactly one explicit
-/// framebuffer heap item and no iterator/read ambiguity for that BDF.
-fn kfd_heap_types(root: &Path) -> HashMap<PciBdf, u64> {
+/// Per-BDF KFD topology evidence, finalized from a complete, unambiguous scan.
+struct KfdNodeEvidence {
+    /// The single recognized (`FB_PRIVATE`/`FB_PUBLIC`) heap type for this
+    /// BDF's node, when the scan found exactly one unambiguous value.
+    heap_type: Option<u64>,
+    /// The node's own `local_mem_size`: `0` means no dedicated local (VRAM)
+    /// memory. This holds for every AMD APU generation regardless of what
+    /// `heap_type` reports, and is the authoritative APU/unified-memory
+    /// signal; nonzero means a discrete GPU.
+    local_mem_size: Option<u64>,
+    /// The node's `gfx_target_version` (decimal `major*10000 + minor*100 +
+    /// stepping`), used only as display-name evidence when nothing more
+    /// specific (`product_name`, local `pci.ids`) is available.
+    gfx_target_version: Option<u64>,
+}
+
+/// One node's per-BDF evidence before finalization. Scalar fields are
+/// accumulated rather than overwritten: a BDF backed by more than one KFD
+/// node (the same ambiguity `heap_type` already guards against) must not let
+/// read order silently pick a winner.
+#[derive(Default)]
+struct NodeAccumulator {
+    heaps: Vec<u64>,
+    local_mem_sizes: Vec<u64>,
+    gfx_target_versions: Vec<u64>,
+    incomplete: bool,
+}
+
+/// Trusts a scalar KFD property only when every node observed for a BDF
+/// agrees on its value.
+fn unambiguous(mut values: Vec<u64>) -> Option<u64> {
+    values.sort_unstable();
+    values.dedup();
+    (values.len() == 1).then(|| values[0])
+}
+
+/// Maps BDFs only when the complete KFD scan is unambiguous for that BDF: no
+/// iterator/read ambiguity, and (for `heap_type`) exactly one explicit
+/// framebuffer heap item.
+fn kfd_node_evidence(root: &Path) -> HashMap<PciBdf, KfdNodeEvidence> {
     let nodes = root.join("sys/class/kfd/kfd/topology/nodes");
     let entries = match std::fs::read_dir(&nodes) {
         Ok(entries) => entries,
         Err(_) => return HashMap::new(),
     };
-    let mut evidence: HashMap<PciBdf, (Vec<u64>, bool)> = HashMap::new();
+    let mut evidence: HashMap<PciBdf, NodeAccumulator> = HashMap::new();
     let mut global_incomplete = false;
     for entry in entries {
         let entry = match entry {
@@ -348,12 +385,20 @@ fn kfd_heap_types(root: &Path) -> HashMap<PciBdf, u64> {
         let mut domain = 0u64;
         let mut location = None;
         let mut simd_count = None;
+        let mut local_mem_size = None;
+        let mut gfx_target_version = None;
         for line in properties.lines() {
             let mut parts = line.split_whitespace();
             match (parts.next(), parts.next()) {
                 (Some("domain"), Some(value)) => domain = value.parse().unwrap_or(0),
                 (Some("location_id"), Some(value)) => location = value.parse::<u64>().ok(),
                 (Some("simd_count"), Some(value)) => simd_count = value.parse::<u64>().ok(),
+                (Some("local_mem_size"), Some(value)) => {
+                    local_mem_size = value.parse::<u64>().ok();
+                }
+                (Some("gfx_target_version"), Some(value)) => {
+                    gfx_target_version = value.parse::<u64>().ok();
+                }
                 _ => {}
             }
         }
@@ -372,11 +417,17 @@ fn kfd_heap_types(root: &Path) -> HashMap<PciBdf, u64> {
             global_incomplete = true;
             continue;
         };
-        let record = evidence.entry(bdf).or_insert_with(|| (Vec::new(), false));
+        let record = evidence.entry(bdf).or_default();
+        if let Some(local_mem_size) = local_mem_size {
+            record.local_mem_sizes.push(local_mem_size);
+        }
+        if let Some(gfx_target_version) = gfx_target_version {
+            record.gfx_target_versions.push(gfx_target_version);
+        }
         let banks = match std::fs::read_dir(dir.join("mem_banks")) {
             Ok(banks) => banks,
             Err(_) => {
-                record.1 = true;
+                record.incomplete = true;
                 continue;
             }
         };
@@ -384,14 +435,14 @@ fn kfd_heap_types(root: &Path) -> HashMap<PciBdf, u64> {
             let bank = match bank {
                 Ok(bank) => bank,
                 Err(_) => {
-                    record.1 = true;
+                    record.incomplete = true;
                     continue;
                 }
             };
             let bank_properties = match std::fs::read_to_string(bank.path().join("properties")) {
                 Ok(properties) => properties,
                 Err(_) => {
-                    record.1 = true;
+                    record.incomplete = true;
                     continue;
                 }
             };
@@ -401,7 +452,7 @@ fn kfd_heap_types(root: &Path) -> HashMap<PciBdf, u64> {
                     && let Ok(heap @ (KFD_HEAP_FB_PRIVATE | KFD_HEAP_FB_PUBLIC)) =
                         value.parse::<u64>()
                 {
-                    record.0.push(heap);
+                    record.heaps.push(heap);
                 }
             }
         }
@@ -411,10 +462,41 @@ fn kfd_heap_types(root: &Path) -> HashMap<PciBdf, u64> {
     }
     evidence
         .into_iter()
-        .filter_map(|(bdf, (heaps, incomplete))| {
-            (!incomplete && heaps.len() == 1).then(|| (bdf, heaps[0]))
+        .filter_map(|(bdf, acc)| {
+            (!acc.incomplete).then(|| {
+                let heap_type = (acc.heaps.len() == 1).then(|| acc.heaps[0]);
+                (
+                    bdf,
+                    KfdNodeEvidence {
+                        heap_type,
+                        local_mem_size: unambiguous(acc.local_mem_sizes),
+                        gfx_target_version: unambiguous(acc.gfx_target_versions),
+                    },
+                )
+            })
         })
         .collect()
+}
+
+/// Decodes KFD's decimal `gfx_target_version` (e.g. `110501`) into an arch
+/// code (e.g. `1151`, for `gfx1151`) per AMD's `major*10000 + minor*100 +
+/// stepping` encoding. Best-effort display evidence only, not a full gfx
+/// name decoder (it does not reproduce CDNA's hex-letter stepping suffix).
+fn format_gfx_target(raw: u64) -> Option<String> {
+    if raw == 0 {
+        return None;
+    }
+    let major = raw / 10_000;
+    let minor = (raw / 100) % 100;
+    let stepping = raw % 100;
+    // Unpadded digit concatenation is only unambiguous while minor and
+    // stepping stay single-digit, as every gfx target decoded so far does;
+    // a two-digit minor or stepping would silently collide with a different
+    // (major, minor, stepping) triple, so decline rather than guess.
+    if minor >= 10 || stepping >= 10 {
+        return None;
+    }
+    Some(format!("{major}{minor}{stepping}"))
 }
 
 /// Resolved read paths for one XCP partition device.
@@ -549,7 +631,7 @@ impl KernelSource {
         }
         // Group partition functions of one package by domain:bus:device.
         cards.sort_by(|a, b| a.bdf.as_str().cmp(b.bdf.as_str()));
-        let heap_types = kfd_heap_types(&self.root);
+        let node_evidence = kfd_node_evidence(&self.root);
         let pci_names = amd_pci_names(&self.root);
         let mut devices: Vec<KernelDevice> = Vec::new();
         let mut index = 0;
@@ -560,7 +642,7 @@ impl KernelSource {
                 group_end += 1;
             }
             let group = &cards[index..group_end];
-            devices.push(build_device(group, &heap_types, &pci_names)?);
+            devices.push(build_device(group, &node_evidence, &pci_names)?);
             index = group_end;
         }
         Ok(devices)
@@ -934,7 +1016,7 @@ fn safe_source_text(text: &str) -> String {
 /// Builds one physical GPU from its sorted partition-function group.
 fn build_device(
     group: &[CardEntry],
-    heap_types: &HashMap<PciBdf, u64>,
+    node_evidence: &HashMap<PciBdf, KfdNodeEvidence>,
     pci_names: &HashMap<String, String>,
 ) -> Result<KernelDevice, String> {
     let owners: Vec<_> = group
@@ -986,10 +1068,16 @@ fn build_device(
                 .unwrap_or(&device_id)
                 .to_ascii_lowercase();
             pci_names.get(&key).cloned().unwrap_or_else(|| {
+                let gfx_suffix = node_evidence
+                    .get(&primary.bdf)
+                    .and_then(|evidence| evidence.gfx_target_version)
+                    .and_then(format_gfx_target)
+                    .map(|gfx| format!(" (gfx{gfx})"))
+                    .unwrap_or_default();
                 if device_id.is_empty() {
-                    "AMD GPU".to_owned()
+                    format!("AMD GPU{gfx_suffix}")
                 } else {
-                    format!("AMD GPU {device_id}")
+                    format!("AMD GPU {device_id}{gfx_suffix}")
                 }
             })
         });
@@ -997,16 +1085,39 @@ fn build_device(
     // KFD heap topology is explicit physical-memory evidence. Without it,
     // preserve an unknown-safe pool label rather than guessing APU/discrete
     // from capacity; the stable VRAM nodes remain the conservative source.
-    let mut package_heaps: Vec<u64> = group
+    let package_evidence: Vec<&KfdNodeEvidence> = group
         .iter()
-        .filter_map(|card| heap_types.get(&card.bdf).copied())
+        .filter_map(|card| node_evidence.get(&card.bdf))
+        .collect();
+    let mut package_heaps: Vec<u64> = package_evidence
+        .iter()
+        .filter_map(|evidence| evidence.heap_type)
         .collect();
     package_heaps.sort_unstable();
     package_heaps.dedup();
-    let pool = match package_heaps.as_slice() {
-        [KFD_HEAP_FB_PUBLIC] => MemoryPool::GTT,
-        [KFD_HEAP_FB_PRIVATE] => MemoryPool::VRAM,
-        _ => MemoryPool::new("unknown"),
+    // `local_mem_size == 0` is authoritative no-dedicated-local-memory
+    // evidence (true for every AMD APU generation) and overrides heap_type
+    // when known: some APUs (e.g. Strix Halo/gfx1151) report their whole
+    // unified pool under the same heap_type value discrete GPUs use for
+    // dedicated VRAM, which would otherwise misclassify the pool. Trusted
+    // only when every partition with evidence agrees, mirroring
+    // `package_heaps`'s unanimous-evidence requirement: a multi-partition
+    // discrete package where just one partition reports `local_mem_size 0`
+    // must not force the whole package to GTT.
+    let local_mem_sizes: Vec<u64> = package_evidence
+        .iter()
+        .filter_map(|evidence| evidence.local_mem_size)
+        .collect();
+    let local_mem_zero =
+        !local_mem_sizes.is_empty() && local_mem_sizes.iter().all(|&size| size == 0);
+    let pool = if local_mem_zero {
+        MemoryPool::GTT
+    } else {
+        match package_heaps.as_slice() {
+            [KFD_HEAP_FB_PUBLIC] => MemoryPool::GTT,
+            [KFD_HEAP_FB_PRIVATE] => MemoryPool::VRAM,
+            _ => MemoryPool::new("unknown"),
+        }
     };
     let (used_node, total_node) = if pool == MemoryPool::GTT {
         ("mem_info_gtt_used", "mem_info_gtt_total")
@@ -1175,6 +1286,114 @@ mod tests {
         assert_eq!(part.mem_total_bytes, Reading::Value(17_179_869_184));
         // mem_busy_percent absent on this APU: structural absence.
         assert_eq!(part.mem_ctl_centipercent, Reading::Absent);
+    }
+
+    #[test]
+    fn local_mem_size_zero_overrides_deceptive_heap_type() {
+        // Strix Halo (gfx1151) live regression: `heap_type 1` on this chip's
+        // unified-memory bank is the same value discrete GPUs use for real
+        // dedicated VRAM, but `local_mem_size 0` proves there is none.
+        let (mut source, devices) = source("apu-strix-halo");
+        let disc = &devices[0].disc;
+        assert_eq!(disc.pool, MemoryPool::GTT);
+        assert_eq!(disc.name, "AMD GPU 0x1586 (gfx1151)");
+        let sample = source.collect_fast(&devices[0]);
+        let part = &sample.partitions[0];
+        assert_eq!(part.mem_total_bytes, Reading::Value(133_143_986_176));
+        assert_eq!(part.mem_used_bytes, Reading::Value(19_224_829_952));
+        assert_eq!(part.activity_centipercent, Reading::Value(6_200));
+        assert_eq!(sample.socket_power_microwatts, Reading::Value(45_000_000));
+        let slow = source.collect_slow(&devices[0]);
+        assert_eq!(
+            slow.partitions[0].gfx_clock_hz,
+            Reading::Value(2_800_000_000)
+        );
+        // v3.0's hotspot scale is undocumented and the host only exposes an
+        // `edge` hwmon channel, never `junction`: no fabricated hotspot.
+        assert_eq!(sample.hotspot_millic, Reading::Absent);
+    }
+
+    #[test]
+    fn mixed_local_mem_size_across_partitions_does_not_force_gtt() {
+        // A multi-partition discrete package where one partition's KFD node
+        // reports local_mem_size 0 (no dedicated memory of its own) while
+        // another reports real dedicated VRAM: local_mem_size must be
+        // unanimous across the package before it can override heap_type,
+        // mirroring package_heaps's own unanimous-evidence requirement.
+        let group = [
+            CardEntry {
+                device: PathBuf::from("/nonexistent-gpuflo/primary"),
+                bdf: PciBdf::parse("0000:41:00.0").unwrap(),
+                has_gpu_metrics: true,
+            },
+            CardEntry {
+                device: PathBuf::from("/nonexistent-gpuflo/secondary"),
+                bdf: PciBdf::parse("0000:41:00.1").unwrap(),
+                has_gpu_metrics: false,
+            },
+        ];
+        let mut node_evidence = HashMap::new();
+        node_evidence.insert(
+            group[0].bdf.clone(),
+            KfdNodeEvidence {
+                heap_type: Some(KFD_HEAP_FB_PRIVATE),
+                local_mem_size: Some(34_359_738_368),
+                gfx_target_version: None,
+            },
+        );
+        node_evidence.insert(
+            group[1].bdf.clone(),
+            KfdNodeEvidence {
+                heap_type: Some(KFD_HEAP_FB_PRIVATE),
+                local_mem_size: Some(0),
+                gfx_target_version: None,
+            },
+        );
+        let device = build_device(&group, &node_evidence, &HashMap::new()).unwrap();
+        assert_eq!(device.disc.pool, MemoryPool::VRAM);
+    }
+
+    #[test]
+    fn conflicting_kfd_nodes_for_one_bdf_do_not_silently_pick_a_winner() {
+        // Two KFD topology nodes reporting the *same* BDF (the exact
+        // ambiguity heap_type's Vec+len==1 check already guards against) but
+        // disagreeing on local_mem_size: the field must come back unknown,
+        // not whichever node std::fs::read_dir happened to visit last.
+        let dir =
+            std::env::temp_dir().join(format!("gpuflo-kernel-kfd-conflict-{}", std::process::id()));
+        let nodes = dir.join("sys/class/kfd/kfd/topology/nodes");
+        for (node, local_mem_size) in [(0, 0u64), (1, 34_359_738_368)] {
+            let node_dir = nodes.join(node.to_string());
+            std::fs::create_dir_all(node_dir.join("mem_banks")).unwrap();
+            std::fs::write(
+                node_dir.join("properties"),
+                format!(
+                    "simd_count 64\ndomain 0\nlocation_id 16640\nlocal_mem_size {local_mem_size}\n"
+                ),
+            )
+            .unwrap();
+        }
+        let evidence = kfd_node_evidence(&dir);
+        let bdf = PciBdf::parse("0000:41:00.0").unwrap();
+        assert!(
+            evidence.contains_key(&bdf),
+            "a complete scan with no read/parse errors must not be dropped"
+        );
+        assert_eq!(
+            evidence.get(&bdf).and_then(|e| e.local_mem_size),
+            None,
+            "conflicting local_mem_size across nodes sharing a BDF must not pick a winner"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn format_gfx_target_declines_ambiguous_multi_digit_components() {
+        // major=1,minor=11,stepping=0 (raw 11100) would otherwise render as
+        // "1110", identical to major=11,minor=1,stepping=0 (raw 110100).
+        assert_eq!(format_gfx_target(11_100), None);
+        assert_eq!(format_gfx_target(110_100), Some("1110".to_owned()));
+        assert_eq!(format_gfx_target(110_501), Some("1151".to_owned()));
     }
 
     #[test]

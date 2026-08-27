@@ -1,0 +1,5 @@
+simd_count 80
+domain 0
+location_id 49408
+local_mem_size 0
+gfx_target_version 110501
