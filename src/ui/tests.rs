@@ -159,6 +159,7 @@ fn state_with_model(color_enabled: bool) -> UiState {
             mode_preference: ModePreference::Auto,
             color_enabled,
             truecolor: true,
+            cat_enabled: false,
         },
         None,
     );
@@ -287,12 +288,63 @@ fn empty_model_keeps_running_with_message() {
 }
 
 // ---------------------------------------------------------------------------
+// Cat easter egg
+// ---------------------------------------------------------------------------
+
+/// The napping cat's face row; present whenever the sprite draws.
+const CAT_MARKER: &str = "-ｪ-";
+
+#[test]
+fn cat_hidden_by_default_even_on_a_warm_gpu() {
+    let state = state_with_model(true);
+    assert!(!state.cat_enabled);
+    let text = buffer_text(&render(&state, 120, 40));
+    assert!(!text.contains(CAT_MARKER), "cat must be opt-in");
+}
+
+#[test]
+fn cat_naps_when_enabled_and_the_selected_gpu_is_warm() {
+    let mut state = state_with_model(true);
+    state.cat_enabled = true;
+    // gpu-a (selected by default) reports a 74°C hotspot: warm.
+    let text = buffer_text(&render(&state, 120, 40));
+    assert!(text.contains(CAT_MARKER), "cat should nap on a warm GPU");
+}
+
+#[test]
+fn cat_stays_away_from_a_gpu_that_is_not_warm() {
+    let mut state = state_with_model(true);
+    state.cat_enabled = true;
+    let _ = state.handle_key(KeyCode::Right); // select gpu-b: asleep, stale temperature.
+    let text = buffer_text(&render(&state, 120, 40));
+    assert!(!text.contains(CAT_MARKER), "no warm GPU, no nap");
+}
+
+#[test]
+fn cat_yields_to_overlays_and_small_surfaces() {
+    let mut state = state_with_model(true);
+    state.cat_enabled = true;
+    state.show_help = true;
+    let text = buffer_text(&render(&state, 120, 40));
+    assert!(!text.contains(CAT_MARKER), "an open overlay must win");
+
+    let mut state = state_with_model(true);
+    state.cat_enabled = true;
+    let text = buffer_text(&render(&state, 40, 8)); // tiny surface: no margin.
+    assert!(
+        !text.contains(CAT_MARKER),
+        "tiny surface has no room to nap"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Bounded size sweep
 // ---------------------------------------------------------------------------
 
 #[test]
 fn every_bounded_size_renders_without_panic() {
     let mut state = state_with_model(true);
+    state.cat_enabled = true;
     for width in 40..=90u16 {
         for height in 8..=40u16 {
             // Alternate selection and overlays to sweep both GPUs' paths.

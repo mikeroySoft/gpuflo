@@ -169,13 +169,15 @@ impl TryFrom<String> for ModePreference {
     }
 }
 
-/// The closed sparse TOML schema: exactly `theme`, `mode`, and `no_color`.
+/// The closed sparse TOML schema: exactly `theme`, `mode`, `no_color`, and
+/// `cat`.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct FileConfig {
     theme: Option<Theme>,
     mode: Option<ModePreference>,
     no_color: Option<bool>,
+    cat: Option<bool>,
 }
 
 /// A startup configuration failure; maps to exit 2.
@@ -198,6 +200,8 @@ pub(crate) struct PresentationOptions {
     pub mode_preference: ModePreference,
     pub color_enabled: bool,
     pub truecolor: bool,
+    /// Opt-in: show a sleeping ASCII cat when the selected GPU is warm.
+    pub cat_enabled: bool,
 }
 
 impl Default for PresentationOptions {
@@ -207,6 +211,7 @@ impl Default for PresentationOptions {
             mode_preference: ModePreference::Auto,
             color_enabled: true,
             truecolor: false,
+            cat_enabled: false,
         }
     }
 }
@@ -246,11 +251,13 @@ pub(crate) fn resolve(
     let theme = cli.theme.or(file.theme).unwrap_or(defaults.theme);
     let mode_preference = cli.mode.or(file.mode).unwrap_or(defaults.mode_preference);
     let disabled = environment.no_color_set() || cli.no_color || file.no_color.unwrap_or(false);
+    let cat_enabled = cli.cat || file.cat.unwrap_or(false);
     Ok(PresentationOptions {
         theme,
         mode_preference,
         color_enabled: !disabled,
         truecolor: environment.truecolor,
+        cat_enabled,
     })
 }
 
@@ -266,6 +273,7 @@ mod tests {
             theme: None,
             mode: None,
             no_color: false,
+            cat: false,
         }
     }
 
@@ -386,6 +394,22 @@ mod tests {
         };
         let (_dir, env) = temp_config("");
         assert!(!resolve(&env, &cli).unwrap().color_enabled);
+    }
+
+    #[test]
+    fn cat_is_opt_in_via_file_or_cli() {
+        let (_dir, env) = temp_config("");
+        assert!(!resolve(&env, &cli_defaults()).unwrap().cat_enabled);
+
+        let (_dir, env) = temp_config("cat = true\n");
+        assert!(resolve(&env, &cli_defaults()).unwrap().cat_enabled);
+
+        let cli = CliOptions {
+            cat: true,
+            ..cli_defaults()
+        };
+        let (_dir, env) = temp_config("");
+        assert!(resolve(&env, &cli).unwrap().cat_enabled);
     }
 
     #[test]

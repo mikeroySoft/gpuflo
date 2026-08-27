@@ -7,6 +7,7 @@
 //! interpolation — owns display state only and never mutates canonical
 //! observations, histories, or health.
 
+mod cat;
 mod format;
 mod layout;
 mod taglines;
@@ -142,6 +143,8 @@ pub(super) struct UiState {
     mode_preference: ModePreference,
     color_enabled: bool,
     truecolor: bool,
+    /// Opt-in: show a sleeping ASCII cat when the selected GPU is warm.
+    cat_enabled: bool,
     /// Chosen once at launch and retained for the whole interactive session.
     tagline: &'static str,
     model: Option<RenderModel>,
@@ -171,6 +174,7 @@ impl UiState {
             mode_preference: presentation.mode_preference,
             color_enabled: presentation.color_enabled,
             truecolor: presentation.truecolor,
+            cat_enabled: presentation.cat_enabled,
             tagline: taglines::select(),
             model: None,
             selected: None,

@@ -23,6 +23,7 @@ signal-hook = "0.3.18"
 thiserror = "2.0.20"
 time = { version = "0.3.55", features = ["formatting", "parsing", "macros", "local-offset"] }
 toml = "0.9.12"
+unicode-width = "0.2.2"
 
 [profile.release]
 lto = true
