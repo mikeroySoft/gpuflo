@@ -16,7 +16,6 @@ use crate::source::Reading;
 use crate::source::process::ProcessRow;
 use crate::state::{ProcessOverlay, RenderModel};
 
-use super::cat;
 use super::format;
 use super::layout::{self, Surface};
 use super::theme::Styler;
@@ -84,16 +83,16 @@ pub(super) fn draw(frame: &mut Frame<'_>, state: &UiState) {
                 peak: render.and_then(|render| render.session_peak_activity),
                 surface,
             };
-            let reserved = match surface {
-                Surface::Mode => layout::centered(area, area.width.min(82), 32),
-                Surface::Compact => layout::centered(area, area.width.min(74), 15),
-                Surface::Mini => layout::centered(area, area.width.min(74), 9),
-                Surface::Tiny => area,
-            };
             match surface {
-                Surface::Mode => render_mode(frame, &view, reserved),
-                Surface::Compact => render_compact(frame, &view, reserved),
-                Surface::Mini => render_mini(frame, &view, reserved),
+                Surface::Mode => {
+                    render_mode(frame, &view, layout::centered(area, area.width.min(82), 32));
+                }
+                Surface::Compact => {
+                    render_compact(frame, &view, layout::centered(area, area.width.min(74), 15));
+                }
+                Surface::Mini => {
+                    render_mini(frame, &view, layout::centered(area, area.width.min(74), 9));
+                }
                 Surface::Tiny => render_tiny(frame, &view, area),
             }
             if state.show_help {
@@ -102,14 +101,6 @@ pub(super) fn draw(frame: &mut Frame<'_>, state: &UiState) {
                 render_processes(frame, &view, area);
             } else if state.show_detail {
                 render_detail(frame, &view, area);
-            } else if state.cat_enabled && surface != Surface::Tiny && cat::gpu_is_warm(gpu) {
-                cat::render(
-                    frame,
-                    &styler,
-                    area,
-                    reserved,
-                    state.started.elapsed().as_secs_f64(),
-                );
             }
         }
     }

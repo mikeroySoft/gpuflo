@@ -27,7 +27,6 @@ It is strictly local and read-only. GPUFlo reads Linux `amdgpu` kernel interface
 - **Human, JSON, and NDJSON output** from the same canonical telemetry model.
 - **Three themes and complete no-color operation** without making color carry required meaning.
 - **100 positive rotating taglines**—one is chosen randomly at launch and remains stable for that session.
-- **Optional sleeping ASCII cat** (`--cat`)—naps in the margin once the selected GPU is warm; pure decoration, never touches telemetry.
 - **Optional runtime AMD SMI enrichment** without a build-time or startup dependency.
 - **Small daily summaries** containing peaks and energy when available; raw samples are never persisted.
 - **Reusable Rust library API** exposing the canonical model and bounded `Monitor` interface.
@@ -276,7 +275,6 @@ Run `gpuflo --help` for the authoritative option reference.
 | `--theme <buffalo\|nord\|monochrome>` | Select the interactive theme |
 | `--mode <auto\|mode\|compact\|mini\|tiny>` | Select the preferred interactive view |
 | `--no-color` | Disable interactive color |
-| `--cat` | Show a sleeping ASCII cat once the selected GPU is warm |
 
 Examples:
 
@@ -366,7 +364,6 @@ The complete schema is intentionally small:
 theme = "buffalo"       # buffalo | nord | monochrome
 mode = "auto"           # auto | mode | compact | mini | tiny
 no_color = false
-cat = false             # sleeping ASCII cat when the selected GPU is warm
 ```
 
 Precedence is:

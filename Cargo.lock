@@ -464,7 +464,6 @@ dependencies = [
  "thiserror 2.0.20",
  "time",
  "toml",
- "unicode-width",
 ]
 
 [[package]]
