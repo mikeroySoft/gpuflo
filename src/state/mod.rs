@@ -12,7 +12,7 @@ pub(crate) mod reducer;
 use std::time::Instant;
 
 use crate::model::{
-    MemoryPool, ObservationState, PartitionId, PciBdf, PhysicalGpuId, Snapshot, Timestamp,
+    MemoryPool, ObservationState, PartitionId, PciBdf, PhysicalGpuId, Platform, Snapshot, Timestamp,
 };
 
 /// Which source produced a batch; kernel observations are authoritative.
@@ -127,6 +127,7 @@ pub(crate) struct DiscoveredGpu {
     pub uuid: Option<String>,
     pub serial: Option<String>,
     pub pool: MemoryPool,
+    pub platform: Platform,
     pub partitions: Vec<DiscoveredPartition>,
 }
 
