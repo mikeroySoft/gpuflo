@@ -164,10 +164,11 @@ def ensure_worktree(n: int) -> Path:
 
 
 def commit_leftovers(wt: Path, n: int, title: str) -> None:
-    if run(["git", "status", "--porcelain"], cwd=wt).stdout.strip():
-        run(["git", "add", "-A", "--",
-             ":(exclude).factory-prompt.md", ":(exclude).lock",
-             ":(exclude).factory"], cwd=wt)
+    run(["git", "add", "-A", "--", ".",
+         ":(exclude).factory-prompt.md", ":(exclude).lock",
+         ":(exclude).factory"], cwd=wt, check=False)
+    staged = run(["git", "diff", "--cached", "--quiet"], cwd=wt, check=False)
+    if staged.returncode != 0:
         run(["git", "commit", "-s", "-m", f"agent/{n}: {title}"], cwd=wt)
 
 
@@ -188,14 +189,15 @@ def run_gate(wt: Path, n: int) -> tuple[bool, str]:
 def escalate(n: int, reason: str, log_path: Path | None) -> None:
     log(f"#{n}: escalating to human ({reason})")
     run(["gh", "issue", "edit", str(n), "--repo", REPO,
-         "--remove-assignee", "@me", "--add-label", "ready-for-human"], check=False)
+         "--remove-assignee", "@me", "--remove-label", "ready-for-agent",
+         "--add-label", "ready-for-human"], check=False)
     body = f"Factory dispatcher escalating: {reason}."
     if log_path:
         body += f"\n\nWorker logs: `{log_path}`"
     run(["gh", "issue", "comment", str(n), "--repo", REPO, "--body", body], check=False)
 
 
-def review(wt: Path, n: int) -> tuple[str, str]:
+def review(wt: Path, n: int, gate_report: str) -> tuple[str, str]:
     """Run codex two-axis review. Returns (verdict, findings markdown)."""
     prompt = (
         f"Review `git diff origin/main..HEAD` in this repository on two axes:\n"
@@ -203,6 +205,11 @@ def review(wt: Path, n: int) -> tuple[str, str]:
         f"(AGENTS.md, docs/)?\n"
         f"2. Spec: does the diff satisfy the text and acceptance criteria of "
         f"GitHub issue #{n} in {REPO}?\n"
+        f"Review the DIFF only. Do NOT execute builds or tests: your sandbox "
+        f"differs from the target host, so your results are not evidence. The "
+        f"deterministic gate already ran on the target host; its report is "
+        f"authoritative for build/test/scan status:\n\n"
+        f"```\n{gate_report}\n```\n\n"
         f"Output findings as markdown. End with exactly one line: "
         f"`VERDICT: APPROVE` or `VERDICT: REVISE`."
     )
@@ -290,7 +297,7 @@ def process_ticket(issue: dict, budget_min: int, dry_run: bool) -> None:
             return
 
         push_and_pr(wt, n, title, report)
-        verdict, findings = review(wt, n)
+        verdict, findings = review(wt, n, report)
         pr_comment(n, findings)
         if verdict == "APPROVE":
             log(f"#{n}: done (approved)")
@@ -306,7 +313,7 @@ def process_ticket(issue: dict, budget_min: int, dry_run: bool) -> None:
             escalate(n, f"gate failed after review bounce; worktree kept at {wt}", logfile)
             return
         run(["git", "push", "origin", f"agent/{n}"], cwd=wt)
-        verdict, findings = review(wt, n)
+        verdict, findings = review(wt, n, report)
         pr_comment(n, findings)
         if verdict != "APPROVE":
             escalate(n, "second REVISE verdict from reviewer", logfile)
