@@ -3,3 +3,4 @@
 /validation/local-*
 .idea/
 *.swp
+/.factory/

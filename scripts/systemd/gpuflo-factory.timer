@@ -1,0 +1,11 @@
+# Runs the gpuflo factory dispatcher every 10 minutes. See the .service
+# file for install instructions.
+[Unit]
+Description=gpuflo AI factory dispatcher timer
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=10min
+
+[Install]
+WantedBy=timers.target
