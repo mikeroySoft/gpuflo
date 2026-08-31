@@ -1,0 +1,12 @@
+# gpuflo AI-factory dispatcher (oneshot; driven by gpuflo-factory.timer).
+# Install:
+#   systemctl --user link %h/dev/mikeroysoft/gpuflo/scripts/systemd/gpuflo-factory.service
+#   systemctl --user link %h/dev/mikeroysoft/gpuflo/scripts/systemd/gpuflo-factory.timer
+#   systemctl --user enable --now gpuflo-factory.timer
+[Unit]
+Description=gpuflo AI factory dispatcher
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/mike/dev/mikeroysoft/gpuflo
+ExecStart=/usr/bin/python3 scripts/factory_dispatch.py
