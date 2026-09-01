@@ -19,20 +19,37 @@ LEAK_RE = re.compile(
     re.IGNORECASE,
 )
 TAIL_LINES = 80
+CHECK_TIMEOUT = 1200  # seconds; overridable via --check-timeout
+
+
+def timed(cmd: list[str]) -> subprocess.CompletedProcess:
+    """Run a command with the per-check timeout.
+
+    A wedged check must FAIL, not hang the pipeline silently. On timeout the
+    direct child is killed and a synthetic failing result is returned.
+    """
+    # ponytail: timeout kills the direct child only; cargo grandchildren may
+    # linger. Switch to start_new_session + killpg if orphans become a problem.
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=CHECK_TIMEOUT)
+    except subprocess.TimeoutExpired as exc:
+        out = exc.stdout or ""
+        if isinstance(out, bytes):
+            out = out.decode(errors="replace")
+        return subprocess.CompletedProcess(
+            cmd, 124, f"{out}\ncheck timed out after {CHECK_TIMEOUT}s", "")
 
 
 def run(cmd: list[str]) -> tuple[bool, str]:
     """Run a command, return (passed, combined output)."""
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = timed(cmd)
     return proc.returncode == 0, proc.stdout + proc.stderr
 
 
 def check_conflict_markers() -> tuple[bool, str]:
-    proc = subprocess.run(
+    proc = timed(
         # Exactly-7-char markers only; long ===== separator lines are legit.
         ["git", "grep", "-nE", r"^(<{7}|={7}|>{7})( |$)"],
-        capture_output=True,
-        text=True,
     )
     # git grep exits 1 when nothing matches — that is the pass case.
     if proc.returncode == 1:
@@ -64,10 +81,8 @@ def check_notices() -> tuple[bool, str]:
 
 def check_leaks(base: str) -> tuple[bool, str]:
     # agent_gate.py itself is excluded: its LEAK_RE literal matches the scan.
-    proc = subprocess.run(
+    proc = timed(
         ["git", "diff", f"{base}..HEAD", "--", ":(exclude)scripts/agent_gate.py"],
-        capture_output=True,
-        text=True,
     )
     if proc.returncode != 0:
         return False, proc.stdout + proc.stderr
@@ -80,6 +95,7 @@ def check_leaks(base: str) -> tuple[bool, str]:
 
 
 def main() -> int:
+    global CHECK_TIMEOUT
     parser = argparse.ArgumentParser(description="Quality gate for agent worktrees.")
     parser.add_argument("--base", default="origin/main", help="base ref for leak scan")
     parser.add_argument(
@@ -91,7 +107,12 @@ def main() -> int:
         help="comma-separated check names to skip "
         "(conflict-markers, fmt, clippy, tests, notices, leak-scan)",
     )
+    parser.add_argument(
+        "--check-timeout", type=int, default=CHECK_TIMEOUT,
+        help="per-check timeout in seconds",
+    )
     args = parser.parse_args()
+    CHECK_TIMEOUT = args.check_timeout
     skip = {name.strip() for name in args.skip.split(",") if name.strip()}
 
     checks = [
