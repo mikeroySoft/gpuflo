@@ -43,7 +43,7 @@ STANDING_INSTRUCTIONS = """
 - Use TDD where practical: failing test first, then the fix.
 - Commit incrementally with `git commit -s`. Stage only files you created or
   edited for the ticket; never `git add -A`, and never commit
-  `.factory-prompt.md`, `.lock`, or gate reports.
+  `.factory-prompt.md` or gate reports.
 - NEVER use `git stash` — the stash is shared with the user's other worktrees.
 - Finish by running `python {gate} --report .factory/gate-report-{n}.md`
   and fixing any failures it reports.
@@ -76,10 +76,18 @@ def lock_held(lockfile: Path) -> bool:
             return True
 
 
+def ticket_lock(n: int) -> Path:
+    # Outside the worktree: deleting a worktree must not erase the evidence
+    # that its pipeline is alive (learned from ticket #5's mid-flight wipe).
+    locks = FACTORY / "locks"
+    locks.mkdir(parents=True, exist_ok=True)
+    return locks / f"{n}.lock"
+
+
 def active_ticket_count() -> int:
     if not FACTORY.is_dir():
         return 0
-    return sum(1 for d in FACTORY.glob("wt-*") if d.is_dir() and lock_held(d / ".lock"))
+    return sum(1 for f in (FACTORY / "locks").glob("*.lock") if lock_held(f))
 
 
 def issue_is_open(number: int) -> bool:
@@ -165,7 +173,7 @@ def ensure_worktree(n: int) -> Path:
 
 def commit_leftovers(wt: Path, n: int, title: str) -> None:
     run(["git", "add", "-A", "--", ".",
-         ":(exclude).factory-prompt.md", ":(exclude).lock",
+         ":(exclude).factory-prompt.md",
          ":(exclude).factory"], cwd=wt, check=False)
     staged = run(["git", "diff", "--cached", "--quiet"], cwd=wt, check=False)
     if staged.returncode != 0:
@@ -260,8 +268,8 @@ def process_ticket(issue: dict, budget_min: int, dry_run: bool) -> None:
     wt = FACTORY / f"wt-{n}"
     worker = "droid" if "chore" in labels else "omp"
 
-    if lock_held(wt / ".lock"):
-        log(f"#{n}: skipped (in flight, lock held on {wt / '.lock'})")
+    if lock_held(ticket_lock(n)):
+        log(f"#{n}: skipped (in flight, lock held on {ticket_lock(n)})")
         return
     if dry_run:
         log(f"#{n}: would claim (assign @me), create worktree {wt} on branch agent/{n}, "
@@ -273,7 +281,7 @@ def process_ticket(issue: dict, budget_min: int, dry_run: bool) -> None:
     wt = ensure_worktree(n)
     LOGS.mkdir(parents=True, exist_ok=True)
 
-    lock_fd = (wt / ".lock").open("w")  # held for the life of this pipeline
+    lock_fd = ticket_lock(n).open("w")  # held for the life of this pipeline
     try:
         fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
