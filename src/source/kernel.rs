@@ -17,6 +17,7 @@ use super::{
     KernelSlowSample, Reading,
 };
 use crate::model::{MemoryPool, PartitionId, PciBdf, PhysicalGpuId, Timestamp};
+use crate::platform::{self, MemoryEvidence};
 use crate::state::{DiscoveredGpu, DiscoveredPartition};
 
 /// Joules per `energy_accumulator` count: 15.259 µJ = 2⁻¹⁶ J.
@@ -994,25 +995,24 @@ fn build_device(
             })
         });
 
-    // KFD heap topology is explicit physical-memory evidence. Strix Halo
-    // reports the same heap type as discrete GPUs despite exposing its
-    // applicable unified-memory accounting through GTT, so use its exact
-    // fixture-backed PCI ID rather than a capacity or product-name heuristic.
+    // KFD heap topology is explicit physical-memory evidence, but some
+    // devices (Strix Halo among them) report the same heap type as discrete
+    // GPUs despite exposing their applicable accounting through GTT. The
+    // platform classifier resolves known quirks like that from the PCI
+    // device ID before falling back to heap-type evidence.
     let mut package_heaps: Vec<u64> = group
         .iter()
         .filter_map(|card| heap_types.get(&card.bdf).copied())
         .collect();
     package_heaps.sort_unstable();
     package_heaps.dedup();
-    let pool = if device_key == "1586" {
-        MemoryPool::GTT
-    } else {
-        match package_heaps.as_slice() {
-            [KFD_HEAP_FB_PUBLIC] => MemoryPool::GTT,
-            [KFD_HEAP_FB_PRIVATE] => MemoryPool::VRAM,
-            _ => MemoryPool::new("unknown"),
-        }
+    let evidence = match package_heaps.as_slice() {
+        [KFD_HEAP_FB_PUBLIC] => MemoryEvidence::Unified,
+        [KFD_HEAP_FB_PRIVATE] => MemoryEvidence::Dedicated,
+        _ => MemoryEvidence::Unknown,
     };
+    let device_platform = platform::classify(&device_key, evidence);
+    let pool = device_platform.memory_pool.clone();
     let (used_node, total_node) = if pool == MemoryPool::GTT {
         ("mem_info_gtt_used", "mem_info_gtt_total")
     } else {
@@ -1055,6 +1055,7 @@ fn build_device(
             uuid: unique_id.map(|u| format!("amdgpu-{u}")),
             serial,
             pool,
+            platform: device_platform,
             partitions: partitions
                 .iter()
                 .map(|p| DiscoveredPartition {
@@ -1096,6 +1097,7 @@ fn validate_microwatts(reading: Reading<u64>) -> Reading<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::PlatformId;
 
     fn fixture(scenario: &str) -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -1168,6 +1170,7 @@ mod tests {
     fn apu_uses_gtt_pool_and_centi_unit_blob() {
         let (mut source, devices) = source("apu-gtt");
         assert_eq!(devices[0].disc.pool, MemoryPool::GTT);
+        assert_eq!(devices[0].disc.platform.id, PlatformId::GENERIC_APU);
         assert_eq!(devices[0].disc.id.as_str(), "gpu-0000:c4:00.0");
         assert_eq!(devices[0].disc.name, "AMD GPU 0x15bf");
         let sample = source.collect_fast(&devices[0]);
@@ -1187,6 +1190,7 @@ mod tests {
         let (mut source, devices) = source("apu-strix-halo");
         let disc = &devices[0].disc;
         assert_eq!(disc.pool, MemoryPool::GTT);
+        assert_eq!(disc.platform.id, PlatformId::STRIX_HALO);
         assert_eq!(disc.name, "AMD GPU 0x1586");
         let sample = source.collect_fast(&devices[0]);
         let part = &sample.partitions[0];
@@ -1209,6 +1213,7 @@ mod tests {
         // sentinel throttle fields must not fabricate a throttle.
         let (mut source, devices) = source("discrete-large-gtt");
         assert_eq!(devices[0].disc.pool, MemoryPool::VRAM);
+        assert_eq!(devices[0].disc.platform.id, PlatformId::GENERIC_DISCRETE);
         let sample = source.collect_fast(&devices[0]);
         assert_eq!(
             sample.partitions[0].mem_total_bytes,

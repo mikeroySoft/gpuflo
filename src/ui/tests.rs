@@ -16,7 +16,8 @@ use crate::cli::GpuSelector;
 use crate::config::{ModePreference, PresentationOptions, Theme};
 use crate::model::{
     Health, HealthCategory, Memory, MemoryPool, Observation, ObservationState, Partition,
-    PartitionId, PciBdf, PhysicalGpu, PhysicalGpuId, Power, Snapshot, Temperature, Timestamp,
+    PartitionId, PciBdf, PhysicalGpu, PhysicalGpuId, Platform, Power, Snapshot, Temperature,
+    Timestamp,
 };
 use crate::source::Reading;
 use crate::source::process::ProcessRow;
@@ -53,6 +54,7 @@ fn healthy_gpu() -> PhysicalGpu {
         name: "AMD Instinct MI300X".to_owned(),
         uuid: Some("uuid-a".to_owned()),
         serial: Some("serial-a".to_owned()),
+        platform: Platform::default(),
         health: Health {
             category: HealthCategory::NONE,
             message: "no active limits or faults".to_owned(),
@@ -94,6 +96,7 @@ fn sleepy_gpu() -> PhysicalGpu {
         name: "AMD Radeon RX 7900 XTX".to_owned(),
         uuid: None,
         serial: None,
+        platform: Platform::default(),
         health: Health {
             category: HealthCategory::TELEMETRY,
             message: "GPU asleep".to_owned(),

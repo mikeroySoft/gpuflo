@@ -736,6 +736,7 @@ impl Reducer {
                 name: gpu.disc.name.clone(),
                 uuid: gpu.disc.uuid.clone(),
                 serial: gpu.disc.serial.clone(),
+                platform: gpu.disc.platform.clone(),
                 health,
                 temperature: crate::model::Temperature {
                     hotspot_celsius: gpu.hotspot.observation_f64(),
@@ -889,7 +890,7 @@ mod tests {
     use time::macros::datetime;
 
     use super::*;
-    use crate::model::{MemoryPool, PartitionId, PciBdf, PhysicalGpuId};
+    use crate::model::{MemoryPool, PartitionId, PciBdf, PhysicalGpuId, Platform};
     use crate::state::MetricResult;
 
     struct Clock {
@@ -929,6 +930,7 @@ mod tests {
             uuid: None,
             serial: None,
             pool: MemoryPool::VRAM,
+            platform: Platform::default(),
             partitions: (0..partitions)
                 .map(|n| DiscoveredPartition {
                     id: part_id(n),

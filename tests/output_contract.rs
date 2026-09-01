@@ -3,8 +3,8 @@
 
 use gpuflo::{
     Health, HealthCategory, Memory, MemoryPool, Observation, ObservationState, Partition,
-    PartitionId, PciBdf, PhysicalGpu, PhysicalGpuId, Power, SCHEMA_VERSION, Snapshot, Temperature,
-    Timestamp,
+    PartitionId, PciBdf, PhysicalGpu, PhysicalGpuId, Platform, PlatformId, Power, SCHEMA_VERSION,
+    Snapshot, Temperature, Timestamp,
 };
 use serde_json::Value;
 use time::macros::datetime;
@@ -30,6 +30,10 @@ fn discrete_gpu() -> PhysicalGpu {
         name: "AMD Instinct MI300X".to_owned(),
         uuid: Some("af1f4235-0000-1000-8000-000000000000".to_owned()),
         serial: None,
+        platform: Platform {
+            id: PlatformId::GENERIC_DISCRETE,
+            memory_pool: MemoryPool::VRAM,
+        },
         health: Health {
             category: HealthCategory::NONE,
             message: "no active limits or faults".to_owned(),
@@ -69,6 +73,10 @@ fn apu_gpu() -> PhysicalGpu {
         name: "AMD Ryzen AI Max+ 395".to_owned(),
         uuid: None,
         serial: None,
+        platform: Platform {
+            id: PlatformId::STRIX_HALO,
+            memory_pool: MemoryPool::GTT,
+        },
         health: Health {
             category: HealthCategory::TELEMETRY,
             message: "hotspot telemetry is stale".to_owned(),
