@@ -165,6 +165,10 @@
   svg.focus-dim .bldg-g:not(.lit), svg.focus-dim .path-g:not(.lit),
   svg.focus-dim .b-label:not(.lit), svg.focus-dim .p-label:not(.lit),
   svg.focus-dim .payload:not(.lit), svg.focus-dim .plate-g { opacity: 0.13; }
+  /* labels keep their on-screen size while the camera zooms: --zk = 1/zoom, set by applyView */
+  .b-label { font-size: calc(11.5px * var(--zk, 1)); stroke-width: calc(4px * var(--zk, 1)); }
+  .p-label { font-size: calc(10px * var(--zk, 1)); stroke-width: calc(4px * var(--zk, 1)); }
+  .d-label { font-size: calc(9.5px * var(--zk, 1)); }
   .scene-ui {
     position: absolute; z-index: 2; display: flex; gap: 6px; padding: 5px;
     background: rgba(16, 20, 27, 0.92); border: 1px solid var(--line);
@@ -793,10 +797,9 @@ function drawPaths(svg, project, curved, mode) {
       const t = p.lt == null ? 0.5 : p.lt;
       const [mx, my] = polylinePoint(xy, t);
       const txt = el('text', { x: mx, y: my + (p.ldy || -10), 'text-anchor': 'middle',
-                               class: 'p-label', 'data-pid': p.id,
-                               fill: k.color, 'font-size': 10,
+                               class: 'p-label', 'data-pid': p.id, fill: k.color,
                                'font-family': 'ui-monospace, SF Mono, Menlo, Consolas, monospace',
-                               'paint-order': 'stroke', stroke: '#0E1219', 'stroke-width': 4 }, labelLayer);
+                               'paint-order': 'stroke', stroke: '#0E1219' }, labelLayer);
       txt.textContent = p.label;
     }
   }
@@ -825,9 +828,9 @@ function wireNode(svg, g, b) {
 function nodeLabel(x, y, b) {
   const c = CAT[b.cat].color;
   const t = el('text', { x, y, 'text-anchor': 'middle', class: 'b-label', 'data-for': b.id,
-                         fill: shade(c, 1.55), 'font-size': 11.5,
+                         fill: shade(c, 1.55),
                          'font-family': 'ui-monospace, SF Mono, Menlo, Consolas, monospace',
-                         'paint-order': 'stroke', stroke: '#0E1219', 'stroke-width': 4 }, BLDG_LABELS);
+                         'paint-order': 'stroke', stroke: '#0E1219' }, BLDG_LABELS);
   t.textContent = b.name;
 }
 function finishScene(svg, key) {
@@ -857,6 +860,7 @@ function applyView(svg) {
   clampView();
   const [bx, by, bw, bh] = BASE_BOX;
   const w = bw / VIEW.k, h = bh / VIEW.k;
+  svg.style.setProperty('--zk', 1 / VIEW.k);   // labels counter-scale, see .b-label/.p-label/.d-label
   svg.setAttribute('viewBox', [bx + VIEW.cx * bw - w / 2, by + VIEW.cy * bh - h / 2, w, h]
     .map(v => v.toFixed(1)).join(' '));
 }
@@ -1106,7 +1110,7 @@ function buildIso(svg) {
     el('polygon', { points: pts(poly), fill: 'none', stroke: c, 'stroke-opacity': 0.3,
                     'stroke-width': 1, 'stroke-dasharray': '3 5' }, g);
     const [tx, ty] = isoP(pl.x0 + 0.3, pl.y1 - 0.1, 0);
-    const t = el('text', { x: tx, y: ty + 12, fill: c, opacity: 0.6, 'font-size': 9.5,
+    const t = el('text', { x: tx, y: ty + 12, fill: c, opacity: 0.6, class: 'd-label',
                            'letter-spacing': '0.15em',
                            'font-family': 'ui-monospace, SF Mono, Menlo, Consolas, monospace' }, g);
     t.textContent = pl.name;
@@ -1145,7 +1149,7 @@ function buildMap(svg) {
                  rx: 26, fill: c, 'fill-opacity': 0.05, stroke: c, 'stroke-opacity': 0.3,
                  'stroke-dasharray': '4 7' }, g);
     const t = el('text', { x: pl.x0 * FS + 14, y: pl.y0 * FS + 20, fill: c, opacity: 0.6,
-                           'font-size': 9.5, 'letter-spacing': '0.15em',
+                           class: 'd-label', 'letter-spacing': '0.15em',
                            'font-family': 'ui-monospace, SF Mono, Menlo, Consolas, monospace' }, g);
     t.textContent = pl.name;
   }
@@ -1205,7 +1209,7 @@ function buildSpace(svg) {
     const ry = (Math.max(...ys) - Math.min(...ys)) / 2 + 8;
     el('ellipse', { cx, cy, rx, ry, fill: c, 'fill-opacity': 0.03, stroke: c,
                     'stroke-opacity': 0.22, 'stroke-dasharray': '3 7' }, g);
-    const t = el('text', { x: cx, y: cy - ry - 6, fill: c, opacity: 0.6, 'font-size': 9.5,
+    const t = el('text', { x: cx, y: cy - ry - 6, fill: c, opacity: 0.6, class: 'd-label',
                            'text-anchor': 'middle', 'letter-spacing': '0.15em',
                            'font-family': 'ui-monospace, SF Mono, Menlo, Consolas, monospace' }, g);
     t.textContent = pl.name;
