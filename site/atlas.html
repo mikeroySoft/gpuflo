@@ -1,0 +1,1434 @@
+<meta charset="utf-8">
+<title>gpuflo Atlas</title>
+<style>
+  :root {
+    --bg: #0D0C0A;
+    --ground: #11100B;
+    --panel: #1A1712;
+    --panel-2: #221C12;
+    --line: #3A2F1E;
+    --ink: #F0E2C8;
+    --muted: #8A7A5E;
+    --faint: #5A4F3C;
+    --amber: #F5A623;
+    --cli: #E8654A;
+    --core: #F5A623;
+    --dash: #38BFAD;
+    --engine: #5B8DD6;
+    --ext: #9B7BD8;
+    --hw: #4CBB6C;
+    --support: #8A93A5;
+    --ctrl: #F0A868;
+    --data: #62D6E8;
+    --mono: "JetBrains Mono", "Fira Code", ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+    --sans: "JetBrains Mono", "Fira Code", ui-monospace, "Segoe UI", Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    transition: background 0.35s ease;
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.55;
+    margin: 0;
+    padding: 0 0 64px;
+  }
+  a { color: var(--amber); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 2240px; margin: 0 auto; padding: 0 32px; }
+
+  header.site { padding: 40px 0 20px; border-bottom: 1px solid var(--line); }
+  .eyebrow {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .eyebrow b { color: var(--amber); font-weight: 600; }
+  h1 {
+    font-family: var(--mono); font-size: clamp(26px, 4vw, 38px);
+    letter-spacing: -0.01em; margin: 8px 0 10px; color: var(--ink);
+    text-wrap: balance;
+  }
+  h1 .dim { color: var(--faint); }
+  .thesis { max-width: 68ch; color: var(--muted); margin: 0; }
+  .thesis code, p code, li code, td code {
+    font-family: var(--mono); font-size: 0.86em; color: var(--ink);
+    background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 3px; padding: 1px 4px; white-space: nowrap;
+  }
+
+  .layout {
+    display: grid; grid-template-columns: minmax(0, 1fr) 380px;
+    gap: 20px; align-items: start; margin-top: 24px;
+  }
+  @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+
+  .scene-card {
+    background: var(--ground); border: 1px solid var(--line);
+    border-radius: 8px; overflow-x: auto; overflow-y: hidden;
+    position: relative;
+  }
+  .legend-overlay {
+    position: absolute; top: 14px; left: 14px; z-index: 2;
+    width: 248px; padding: 14px 16px;
+    background: rgba(16, 20, 27, 0.92); border: 1px solid var(--line);
+    border-radius: 8px; backdrop-filter: blur(4px);
+  }
+  .legend-overlay h2 {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--muted); margin: 0 0 10px; font-weight: 600;
+  }
+  .legend-overlay .legend-row { margin: 5px 0; font-size: 12px; }
+  .legend-overlay .legend-note { font-size: 11px; }
+  @media (max-width: 980px) {
+    .legend-overlay { position: static; width: auto; margin: 0;
+      border: 0; border-top: 1px solid var(--line); border-radius: 0;
+      background: var(--panel); }
+  }
+  #scene-holder svg { display: block; min-width: 1500px; width: 100%; height: auto; }
+  .scene-hint {
+    font-family: var(--mono); font-size: 11px; color: var(--faint);
+    padding: 8px 14px; border-top: 1px solid var(--line);
+  }
+
+  aside .box {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; padding: 16px 18px; margin-bottom: 16px;
+  }
+  aside h2 {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--muted); margin: 0 0 12px; font-weight: 600;
+  }
+  .legend-row { display: flex; align-items: center; gap: 10px; margin: 7px 0; font-size: 13px; }
+  .legend-row svg { flex: none; }
+  .legend-note { font-size: 12px; color: var(--muted); margin: 10px 0 0; }
+  .legend-sep { border: 0; border-top: 1px solid var(--line); margin: 12px 0; }
+
+  #inspector { min-height: 300px; }
+  #inspector .cat-chip {
+    display: inline-block; font-family: var(--mono); font-size: 10px;
+    letter-spacing: 0.1em; text-transform: uppercase; border-radius: 3px;
+    padding: 2px 7px; margin-bottom: 8px; color: var(--bg); font-weight: 700;
+  }
+  #inspector h3 { font-family: var(--mono); font-size: 17px; margin: 0 0 8px; }
+  #inspector p { font-size: 13.5px; color: var(--ink); margin: 0 0 10px; }
+  #inspector .files { margin: 10px 0 0; padding: 0; list-style: none; }
+  #inspector .files li {
+    font-family: var(--mono); font-size: 11.5px; margin: 5px 0;
+    padding-left: 14px; text-indent: -14px; color: var(--muted); line-height: 1.5;
+  }
+  #inspector .files li a { color: var(--amber); }
+  #inspector .conn { margin: 12px 0 0; font-size: 12px; color: var(--muted); }
+  #inspector ol { font-size: 13px; padding-left: 20px; margin: 8px 0; color: var(--ink); }
+  #inspector ol li { margin: 6px 0; }
+  #inspector ol code, #inspector .files code { background: none; border: 0; padding: 0; color: var(--ctrl); }
+
+  section.deep { margin-top: 48px; }
+  section.deep > h2 {
+    font-family: var(--mono); font-size: 13px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--muted); font-weight: 600;
+    border-bottom: 1px solid var(--line); padding-bottom: 10px;
+  }
+  .district-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; margin-top: 20px; }
+  .d-card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; border-top: 2px solid var(--line); }
+  .d-card h3 { font-family: var(--mono); font-size: 14px; margin: 0 0 4px; }
+  .d-card .d-sub { font-size: 12px; color: var(--muted); margin: 0 0 12px; }
+  .d-card .bldg { margin: 12px 0 0; padding-top: 12px; border-top: 1px dashed var(--line); }
+  .d-card .bldg h4 { font-family: var(--mono); font-size: 13px; margin: 0 0 4px; color: var(--ink); }
+  .d-card .bldg p { font-size: 12.5px; color: var(--muted); margin: 0 0 6px; }
+  .d-card .cites { font-family: var(--mono); font-size: 11px; line-height: 1.7; color: var(--faint); }
+  .d-card .cites a { color: var(--amber); }
+
+  table.paths { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 13px; }
+  table.paths th {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--muted); text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line);
+  }
+  table.paths td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.paths td.kind { font-family: var(--mono); font-size: 11px; white-space: nowrap; }
+  table.paths td.route { font-family: var(--mono); font-size: 12px; white-space: nowrap; color: var(--ink); }
+  table.paths td.cite { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+  table.paths td.cite a { color: var(--amber); }
+  .table-scroll { overflow-x: auto; }
+  .k-ctrl { color: var(--ctrl); } .k-data { color: var(--data); } .k-dep { color: var(--faint); } .k-build { color: var(--ext); }
+
+  footer.site { margin-top: 56px; font-family: var(--mono); font-size: 11px; color: var(--faint); }
+  footer.site a { color: var(--muted); }
+
+  /* SVG interaction */
+  .bldg-g { cursor: pointer; outline: none; }
+  .bldg-g:hover .b-face, .bldg-g:focus-visible .b-face { filter: brightness(1.25); }
+  .bldg-g:focus-visible .b-top { stroke: #fff; stroke-width: 1.4; }
+  .bldg-g.selected .b-top { stroke: #FFFFFF; stroke-width: 1.4; }
+  .path-g .hit { cursor: pointer; pointer-events: stroke; }
+  .bldg-g, .path-g, .b-label, .p-label, .payload, .plate-g { transition: opacity 0.18s ease; }
+  svg.focus-dim .bldg-g:not(.lit), svg.focus-dim .path-g:not(.lit),
+  svg.focus-dim .b-label:not(.lit), svg.focus-dim .p-label:not(.lit),
+  svg.focus-dim .payload:not(.lit), svg.focus-dim .plate-g { opacity: 0.13; }
+  .scene-ui {
+    position: absolute; z-index: 2; display: flex; gap: 6px; padding: 5px;
+    background: rgba(16, 20, 27, 0.92); border: 1px solid var(--line);
+    border-radius: 8px; backdrop-filter: blur(4px);
+  }
+  .theme-switch { top: 14px; right: 14px; }
+  .theme-switch button {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em;
+    color: var(--muted); background: none; border: 1px solid transparent;
+    border-radius: 5px; padding: 5px 10px; cursor: pointer;
+  }
+  .theme-switch button:hover { color: var(--ink); }
+  .theme-switch button.active { color: var(--ink); background: var(--panel-2); border-color: var(--line); }
+  .theme-switch button:focus-visible, .view-widget button:focus-visible,
+  .view-widget input:focus-visible { outline: 1px solid var(--data); }
+  .view-widget { bottom: 52px; right: 14px; align-items: center; gap: 12px; padding: 8px 12px; }
+  .view-widget label {
+    display: flex; align-items: center; gap: 7px;
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+  }
+  .view-widget input[type="range"] { width: 110px; accent-color: var(--data); }
+  .view-widget .val { color: var(--ink); min-width: 34px; text-align: right; }
+  .view-widget button {
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+    background: none; border: 1px solid var(--line); border-radius: 5px;
+    padding: 4px 9px; cursor: pointer;
+  }
+  .view-widget button:hover { color: var(--ink); }
+  body.theme-map {
+    --bg: #081119; --ground: #0A141E; --panel: #0D1926; --panel-2: #132333;
+    --line: #1E3242; --ink: #D3DFE9; --muted: #7E94A6; --faint: #4F6679;
+  }
+  body.theme-map .scene-ui, body.theme-map .legend-overlay { background: rgba(9, 20, 30, 0.92); }
+  body.theme-space {
+    --bg: #040609; --ground: #05070D; --panel: #0A0E17; --panel-2: #111726;
+    --line: #1A2334; --ink: #D6DCEC; --muted: #7B85A0; --faint: #4E5874;
+  }
+  body.theme-space .scene-ui, body.theme-space .legend-overlay { background: rgba(6, 9, 16, 0.92); }
+  @media (max-width: 980px) {
+    .scene-ui { position: static; margin: 10px 14px 0; display: inline-flex; }
+  }
+  #scene-holder { cursor: grab; touch-action: none; }
+  #scene-holder.panning { cursor: grabbing; }
+  .legend-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: grab; }
+  .legend-head:active { cursor: grabbing; }
+  .legend-toggle {
+    flex: none; font-family: var(--mono); font-size: 13px; line-height: 1;
+    color: var(--muted); background: none; border: 1px solid var(--line);
+    border-radius: 4px; width: 20px; height: 20px; padding: 0; cursor: pointer;
+  }
+  .legend-toggle:hover { color: var(--ink); }
+  .legend-toggle:focus-visible { outline: 1px solid var(--data); }
+  .legend-overlay.min > *:not(.legend-head) { display: none; }
+  .legend-overlay.min h2 { margin-bottom: 0; }
+  @media (max-width: 980px) { .legend-head { cursor: default; } }
+  @media (prefers-reduced-motion: reduce) { .payload { display: none; } }
+</style>
+
+<header class="site">
+  <div class="wrap">
+    <div class="eyebrow"><a href="index.html">&larr; gpuflo</a> · <b>mikeroySoft/gpuflo</b> · main @ 52cc9ad · isometric system map</div>
+    <h1>gpuflo Atlas <span class="dim">// AMD GPU telemetry, one binary</span></h1>
+    <p class="thesis">
+      Every building is a real Rust module, data source, or deployed consumer; every road is a
+      control or data path that exists in the code, cited to the file that implements it.
+      Building height is proportional to lines of code. Click a building to inspect it.
+    </p>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="layout">
+    <div>
+      <div class="scene-card">
+        <div id="scene-holder"></div>
+        <div class="scene-ui theme-switch" role="tablist" aria-label="Map style">
+          <button data-theme="iso" class="active">Isometric city</button>
+          <button data-theme="map">Flat map</button>
+          <button data-theme="space">Deep space</button>
+        </div>
+        <div class="scene-ui view-widget" id="view-widget">
+          <span class="view-3d" id="view-3d" style="display:flex;align-items:center;gap:12px">
+          <label>rotate
+            <input type="range" id="rot" min="0" max="360" value="0" step="1">
+            <span class="val" id="rot-v">0°</span>
+          </label>
+          <label>tilt
+            <input type="range" id="tilt" min="30" max="92" value="50" step="1">
+            <span class="val" id="tilt-v">50</span>
+          </label>
+          </span>
+          <button id="zoom-out" aria-label="Zoom out">&minus;</button>
+          <button id="zoom-in" aria-label="Zoom in">+</button>
+          <button id="view-reset">reset</button>
+        </div>
+        <div class="legend-overlay" id="legend">
+          <div class="legend-head" id="legend-head">
+            <h2>Legend</h2>
+            <button class="legend-toggle" id="legend-toggle" aria-expanded="true" aria-label="Minimize legend">&ndash;</button>
+          </div>
+          <div id="legend-cats"></div>
+          <hr class="legend-sep">
+          <div id="legend-paths"></div>
+          <p class="legend-note">Moving dots are payloads: sysfs sensor bytes, AMD-SMI samples, metric batches, snapshots, NDJSON lines, and daily records in transit.</p>
+        </div>
+        <div class="scene-hint">hover a road or building = isolate its connections · click = inspect · drag = pan · scroll = zoom · size ∝ LOC · Linux + amdgpu only — no ROCm, no root, no daemon</div>
+      </div>
+    </div>
+    <aside>
+      <div class="box" id="inspector" aria-live="polite"></div>
+    </aside>
+  </div>
+
+  <section class="deep">
+    <h2>Districts &amp; buildings — file citations</h2>
+    <div class="district-grid" id="district-grid"></div>
+  </section>
+
+  <section class="deep">
+    <h2>Path index — what actually moves, and where it's implemented</h2>
+    <div class="table-scroll">
+      <table class="paths" id="path-table">
+        <thead><tr><th>Kind</th><th>Route</th><th>Payload / mechanism</th><th>Citation</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer class="site">
+    <div>Derived from source at <a href="https://github.com/mikeroySoft/gpuflo" target="_blank" rel="noopener">github.com/mikeroySoft/gpuflo</a>, main @ 52cc9ad (2026-08-31). Heights use exact per-module line counts; data sources, hardware, and consumers are not LOC-scaled.</div>
+  </footer>
+</div>
+
+<script>
+'use strict';
+const GH = 'https://github.com/mikeroySoft/gpuflo/blob/52cc9ad335910d84983579466f5cbff504e21df0/';
+const CAT = {
+  entry: { name: 'Entry & CLI',           color: '#E8654A' },
+  mon:   { name: 'Monitor core',          color: '#F5A623' },
+  src:   { name: 'Telemetry sources',     color: '#38BFAD' },
+  state: { name: 'State & model',         color: '#5B8DD6' },
+  out:   { name: 'Output surfaces',       color: '#C9B458' },
+  ext:   { name: 'Kernel & consumers',    color: '#9B7BD8' },
+  hw:    { name: 'GPU hardware',          color: '#4CBB6C' },
+  sup:   { name: 'Delivery & test yard',  color: '#8A93A5' },
+};
+const KIND = {
+  control: { name: 'Control path',      color: '#F0A868', dash: null,  label: 'spawn / commands / scheduling' },
+  data:    { name: 'Data path',         color: '#62D6E8', dash: '7 5', label: 'samples / snapshots / NDJSON' },
+  dep:     { name: 'Module dependency', color: '#5A4F3C', dash: '2 4', label: 'compile-time use edge' },
+  build:   { name: 'CI / delivery',     color: '#9B7BD8', dash: '2 4', label: 'GitHub Actions edge' },
+};
+
+/* ---- Buildings: gx,gy grid position; w,d footprint; h height px; kind = silhouette ---- */
+const B = [
+  // Kernel evidence (back row)
+  { id:'sysfs', name:'Linux sysfs (amdgpu + hwmon)', cat:'ext', gx:3, gy:0.5, w:2, d:2, h:10, kind:'pad',
+    blurb:'The authoritative evidence: /sys/class/drm/card*/device nodes exposed by the amdgpu driver — the coherent gpu_metrics blob, busy percentages, VRAM/GTT counters, hwmon temperatures, power, clocks, and RAS/throttle files. No root, no daemon.',
+    files:[ ['src/source/kernel.rs',530,'discover(): AMD PCI devices bound to amdgpu'], ['src/source/kernel.rs',571,'fast collection: gpu_metrics with per-field fallbacks'], ['src/source/kernel.rs',667,'slow collection: limits, clocks, throttle, RAS'] ],
+    conn:'Read by the kernel adapter on 250 ms / 1 s cadences.' },
+  { id:'amdsmilib', name:'libamd_smi.so (optional)', cat:'ext', gx:9, gy:0.5, w:2, d:2, h:8, kind:'pad',
+    blurb:'AMD’s vendor C library, loaded dynamically at runtime if present (libamd_smi.so.24 or .so). Absence, an unknown ABI, or a bad library disables enrichment instead of stopping gpuflo.',
+    files:[ ['src/source/amdsmi.rs',118,'AmdSmi: dynamic loading of a known ABI'], ['src/source/amdsmi.rs',289,'sample(): activity + VRAM enrichment'] ],
+    conn:'Feeds the AMD-SMI enrichment adapter.' },
+  { id:'prockfd', name:'/proc fdinfo + KFD', cat:'ext', gx:15, gy:0.5, w:2, d:2, h:8, kind:'pad',
+    blurb:'Per-process evidence: DRM fdinfo under /proc/<pid>, comm/cgroup, and KFD accounting under /sys/class/kfd. Read only while the TUI process overlay is open.',
+    files:[ ['src/source/process.rs',158,'scan(): fdinfo + KFD walk'] ],
+    conn:'Feeds the on-demand process-attribution adapter.' },
+
+  // Hardware (right back corner)
+  { id:'gpu', name:'AMD GPU (Radeon / Instinct)', cat:'hw', gx:25.5, gy:0.5, w:2.5, d:2.5, h:50, kind:'plant',
+    blurb:'The metal. gpuflo is Linux-only and AMD-only: any PCI device bound to amdgpu, including discrete cards, APUs with shared GTT memory, and multi-XCP partitioned parts.',
+    files:[ ['src/source/kernel.rs',503,'KernelSource: sysfs-backed AMD adapter'], ['src/model.rs',162,'tagged Observation vocabulary'] ],
+    conn:'Surfaced through the amdgpu driver; never touched directly.' },
+
+  // Telemetry sources
+  { id:'kernel', name:'source/kernel.rs', cat:'src', gx:3, gy:5.8, w:2.6, d:2.6, h:100, kind:'sensor',
+    blurb:'The primary adapter (1,431 LOC): discovers AMD DRM cards, groups XCP PCI functions into one physical GPU, and reads fast (250 ms) and slow (1 s) amdgpu telemetry plus health evidence. Kernel data is authoritative; everything else only enriches.',
+    files:[ ['src/source/kernel.rs',503,'KernelSource'], ['src/source/kernel.rs',530,'discover()'], ['src/source/kernel.rs',571,'fast lane'], ['src/source/kernel.rs',667,'slow lane'] ],
+    conn:'Driven by monitor lanes; its samples flow to normalize.' },
+  { id:'amdsmi', name:'source/amdsmi.rs', cat:'src', gx:8, gy:6.2, w:1.8, d:1.8, h:40, kind:'sensor',
+    blurb:'Optional enrichment (571 LOC): copies GFX/UMC activity and VRAM figures out of the vendor library into owned Rust samples. Strictly secondary to kernel data.',
+    files:[ ['src/source/amdsmi.rs',103,'AmdSmiSample'], ['src/source/amdsmi.rs',289,'sample()'] ],
+    conn:'Feeds normalize as a secondary metric batch.' },
+  { id:'process', name:'source/process.rs', cat:'src', gx:12, gy:6.2, w:1.8, d:1.8, h:46, kind:'sensor',
+    blurb:'On-demand attribution (656 LOC): combines DRM fdinfo and KFD accounting into PID/GPU rows when the TUI opens process detail. Reports the two memory systems separately and never claims per-process utilization.',
+    files:[ ['src/source/process.rs',17,'ProcessRow'], ['src/source/process.rs',47,'ProcessSource'], ['src/source/process.rs',158,'scan()'] ],
+    conn:'Rows live only in the private render model, never in public JSON.' },
+
+  // Monitor core
+  { id:'monitor', name:'monitor.rs (coordinator)', cat:'mon', gx:7.5, gy:12, w:3, d:3, h:108, kind:'tower2',
+    blurb:'The concurrency hub (1,536 LOC): discovers devices, schedules independent kernel / AMD-SMI / process lanes, rejects late or timed-out results, publishes snapshots, notices, and fatals, and bounds shutdown. A slow source can never block the instrument.',
+    files:[ ['src/monitor.rs',321,'Monitor::start'], ['src/monitor.rs',915,'coordinator run loop'], ['src/monitor.rs',1070,'snapshot / render publication'] ],
+    conn:'Talks to every source lane, the reducer, persistence, and both output routes.' },
+  { id:'normalize', name:'normalize.rs', cat:'mon', gx:3.8, gy:13.4, w:2, d:1.4, h:34, kind:'hall',
+    blurb:'Converts source units and source-specific failures into one internal metric vocabulary (470 LOC). It does not decide source precedence — the reducer does.',
+    files:[ ['src/normalize.rs',69,'kernel_fast'], ['src/normalize.rs',137,'kernel_slow'], ['src/normalize.rs',200,'amdsmi'] ],
+    conn:'Sits between raw samples and the reducer.' },
+  { id:'persist', name:'persist.rs (daily lane)', cat:'mon', gx:12.2, gy:13, w:1.4, d:2, h:26, kind:'depot',
+    blurb:'Loads and atomically writes a compact daily summary asynchronously (353 LOC). Pending writes coalesce so telemetry is never backed up behind disk I/O. Lands in $XDG_STATE_HOME/gpuflo/daily.json.',
+    files:[ ['src/persist.rs',25,'load'], ['src/persist.rs',67,'atomic store'], ['src/persist.rs',101,'PersistLane'] ],
+    conn:'Fed by the monitor on reducer daily-record updates.' },
+
+  // State & model
+  { id:'reducer', name:'state/reducer.rs', cat:'state', gx:17.5, gy:11.8, w:3, d:3, h:110, kind:'tower3',
+    blurb:'The tallest tower (1,559 LOC): a deterministic state machine that applies topology and metric batches, tracks freshness, peaks, and histories, then assembles public snapshots and private TUI projections. Kernel authority and late-data policy become product state here.',
+    files:[ ['src/state/reducer.rs',401,'Reducer'], ['src/state/reducer.rs',462,'apply_batch_at'], ['src/state/reducer.rs',690,'assemble()'] ],
+    conn:'Everything the user sees was decided here first.' },
+  { id:'statesup', name:'state/{history,health,mod}.rs', cat:'state', gx:22, gy:12, w:1.8, d:1.8, h:40, kind:'slab',
+    blurb:'Derived-state support (559 LOC): fixed-size metric rings for graphs, per-day peaks and energy deltas, one factual highest-priority health message per GPU, and the shared MetricBatch / RenderModel vocabulary.',
+    files:[ ['src/state/history.rs',84,'DailyAccumulator'], ['src/state/health.rs',33,'Health select()'], ['src/state/mod.rs',86,'MetricBatch'] ],
+    conn:'Pure helpers of the reducer; no I/O.' },
+  { id:'model', name:'model.rs (public contract)', cat:'state', gx:20, gy:15.5, w:2, d:1.2, h:44, kind:'gate',
+    blurb:'The customs house (596 LOC): GPU identity, timestamped observations, health, memory / power / temperature, partitions, and the versioned serde Snapshot — the stable vocabulary for the library API, JSON output, and the NDJSON stream (schema_version 1).',
+    files:[ ['src/model.rs',162,'tagged Observation'], ['src/model.rs',410,'public Snapshot'] ],
+    conn:'Assembled by the reducer; serialized by output; consumed by Noctalia.' },
+
+  // Entry & CLI
+  { id:'mainb', name:'main.rs + lib.rs', cat:'entry', gx:2.6, gy:20.6, w:1, d:1, h:8, kind:'kiosk',
+    blurb:'The tiny executable (42 LOC combined) converts the library result into a process exit code; lib.rs exposes the stable model and Monitor while keeping implementation modules private.',
+    files:[ ['src/main.rs',3,'main()'], ['src/lib.rs',35,'public run_from_env'] ],
+    conn:'Boots the runner.' },
+  { id:'clib', name:'cli.rs', cat:'entry', gx:2.6, gy:18, w:1.6, d:1.4, h:22, kind:'kiosk',
+    blurb:'Fixed-flag parser (288 LOC): --json-stream, --tiny, --once, theme, mode, and PCI-BDF GPU selection. Conflicting output modes are rejected before telemetry starts.',
+    files:[ ['src/cli.rs',116,'parse'], ['src/cli.rs',31,'OutputMode'] ],
+    conn:'Produces the Invocation the runner executes.' },
+  { id:'configb', name:'config.rs', cat:'entry', gx:5.2, gy:18, w:1.8, d:1.4, h:30, kind:'hall',
+    blurb:'Environment + optional TOML presentation settings with a fixed precedence order (431 LOC). Decides TUI colors, theme, and layout — never telemetry semantics.',
+    files:[ ['src/config.rs',242,'resolve'], ['src/config.rs',17,'Environment'] ],
+    conn:'Feeds presentation options into the runner.' },
+  { id:'runb', name:'run.rs (surface runner)', cat:'entry', gx:6.6, gy:20.2, w:1.8, d:1.4, h:28, kind:'gate',
+    blurb:'The invocation orchestrator (369 LOC): owns startup errors and chooses TUI, one human line, one JSON document, tiny status, or continuous NDJSON. The only layer that maps typed outcomes to shell exit codes (SIGINT → 130; broken pipe → success).',
+    files:[ ['src/run.rs',30,'run_from_env'], ['src/run.rs',199,'json_stream loop'] ],
+    conn:'Starts the monitor, then routes snapshots to a surface.' },
+
+  // Output surfaces
+  { id:'outputb', name:'output.rs', cat:'out', gx:9.4, gy:17.8, w:1.8, d:1.4, h:38, kind:'depot',
+    blurb:'ANSI-free writers (539 LOC): human one-shot and tiny lines, pretty JSON, and the NDJSON stream writer that emits exactly one compact Snapshot + newline + flush per tick.',
+    files:[ ['src/output.rs',18,'pretty one-shot JSON'], ['src/output.rs',30,'NDJSON line writer'], ['src/output.rs',42,'human one-shot'] ],
+    conn:'The machine-readable face of gpuflo.' },
+  { id:'terminalb', name:'terminal.rs', cat:'out', gx:9.4, gy:20.6, w:1.4, d:1.2, h:18, kind:'kiosk',
+    blurb:'RAII terminal lifecycle (258 LOC): raw mode and alternate screen for the TUI, restored on every path — normal quit, SIGINT, or fatal — before diagnostics print.',
+    files:[ ['src/terminal.rs',54,'TerminalGuard'], ['src/terminal.rs',87,'restore'] ],
+    conn:'Wraps only the interactive route.' },
+  { id:'uimod', name:'ui/mod.rs (session)', cat:'out', gx:12, gy:17.8, w:1.8, d:1.4, h:28, kind:'hall',
+    blurb:'The 125 ms input/render loop (403 LOC): retains user-only selection and overlay state, sends process-scope commands to the monitor, and never alters canonical telemetry.',
+    files:[ ['src/ui/mod.rs',55,'interactive run'], ['src/ui/mod.rs',141,'UiState'] ],
+    conn:'Bridges monitor render models to the widget layer.' },
+  { id:'widgets', name:'ui/widgets.rs', cat:'out', gx:14.8, gy:18, w:2.2, d:2.2, h:78, kind:'screen',
+    blurb:'The Ratatui drawing layer (1,105 LOC): screens, braille graphs, GPU cards, help and detail panels, and the process overlay. Renders only — it gathers and mutates nothing.',
+    files:[ ['src/ui/widgets.rs',55,'top-level draw'], ['src/ui/widgets.rs',850,'process column sizing'] ],
+    conn:'Consumes UiState; emits terminal cells.' },
+  { id:'uihelp', name:'ui/{layout,theme,format,cat}', cat:'out', gx:17.8, gy:20.6, w:1.6, d:1.4, h:54, kind:'slab',
+    blurb:'Presentation helpers (785 LOC): responsive breakpoints, color palettes, numeric formatting and graph interpolation, startup taglines — and the optional cat.',
+    files:[ ['src/ui/layout.rs',56,'responsive effective()'], ['src/ui/theme.rs',29,'palette'], ['src/ui/format.rs',62,'braille graph'] ],
+    conn:'Leaf helpers of the widget layer.' },
+
+  // Consumers
+  { id:'noctalia', name:'Noctalia plugin (bar + desktop)', cat:'ext', gx:21.5, gy:19.5, w:2.2, d:2, h:20, kind:'screen',
+    blurb:'The deployed consumer (266 LOC of Luau): a Noctalia service starts gpuflo --json-stream once, validates schema 1 per line, and feeds both a taskbar chip and a desktop overlay card per GPU. Clicking the bar opens the full TUI.',
+    files:[ ['plugins/noctalia/gpuflo/service.luau',7,'runStream("gpuflo --json-stream")'], ['plugins/noctalia/gpuflo/bar.luau',1,'taskbar chip'], ['plugins/noctalia/gpuflo/desktop.luau',1,'desktop overlay cards'] ],
+    conn:'Proof that the NDJSON contract holds outside the terminal.' },
+
+  // Delivery & test yard
+  { id:'testsb', name:'tests (integration + UI)', cat:'sup', gx:25.8, gy:15, w:2, d:2, h:48, kind:'slab',
+    blurb:'1,496 LOC of tests: the fixture-host monitor journey, the public JSON output contract, real-PTY terminal restoration of the compiled binary, and 725 LOC of deterministic UI render tests.',
+    files:[ ['tests/monitor_journey.rs',88,'full journey incl. slow-consumer sequence gaps'], ['tests/output_contract.rs',140,'schema envelope'], ['tests/pty_restoration.rs',162,'restoration after normal quit'] ],
+    conn:'Run by CI on every push.' },
+  { id:'cib', name:'GitHub Actions (3 workflows)', cat:'sup', gx:28.8, gy:15.4, w:1.2, d:1.2, h:14, kind:'kiosk',
+    blurb:'182 LOC: ci.yml (fmt, clippy, all-target tests, MSRV 1.96, aarch64 check), release.yml (tag-built signed x86_64 archive), pages.yml (site deploy).',
+    files:[ ['.github/workflows/ci.yml',1,'quality gate'], ['.github/workflows/release.yml',1,'release packaging'] ],
+    conn:'Gates and ships everything.' },
+  { id:'siteb', name:'site + install.sh', cat:'sup', gx:26.5, gy:18.8, w:2, d:1.4, h:12, kind:'pad',
+    blurb:'The static product page (227 LOC) deployed by Pages, and the 56-LOC installer that downloads the checksummed release archive into a user-owned directory.',
+    files:[ ['site/index.html',1,'product page'], ['install.sh',1,'download + verify'] ],
+    conn:'The front door.' },
+];
+
+/* ---- Districts (ground plates) ---- */
+const PLATES = [
+  { name:'KERNEL EVIDENCE',      cat:'ext',   x0:-0.78, y0:-0.78, x1:20.8,  y1:3.4 },
+  { name:'GPU',                  cat:'hw',    x0:24.5,  y0:-0.78, x1:29.6,  y1:3.9 },
+  { name:'TELEMETRY SOURCES',    cat:'src',   x0:2.2,   y0:4.9,   x1:15.6,  y1:9.6 },
+  { name:'MONITOR CORE',         cat:'mon',   x0:3.1,   y0:11.2,  x1:15.0,  y1:16.3 },
+  { name:'STATE & MODEL',        cat:'state', x0:16.6,  y0:11.0,  x1:24.9,  y1:16.9 },
+  { name:'ENTRY & CLI',          cat:'entry', x0:1.6,   y0:17.2,  x1:8.9,   y1:22.2 },
+  { name:'OUTPUT SURFACES',      cat:'out',   x0:9.1,   y0:17.2,  x1:19.8,  y1:22.5 },
+  { name:'CONSUMERS',            cat:'ext',   x0:20.6,  y0:18.6,  x1:24.8,  y1:22.3 },
+  { name:'DELIVERY & TEST YARD', cat:'sup',   x0:25.2,  y0:14.2,  x1:30.6,  y1:20.9 },
+];
+
+/* ---- Paths ---- */
+const P = [
+  // Control
+  { id:'p1', kind:'control', from:'clib', to:'runb',
+    label:'Invocation',
+    pts:[[3.4,18.7],[4.8,20.6],[7,20.9]], lt:0.4, ldy:16,
+    what:'cli::parse validates flags and GPU selection, rejecting conflicting output modes before telemetry starts.',
+    cite:[['src/cli.rs',116,'parse'],['src/run.rs',30,'run_from_env']],
+    payload:{r:2.4, dur:5, kind:'control'} },
+  { id:'p2', kind:'control', from:'configb', to:'runb',
+    label:'',
+    pts:[[6.1,18.7],[7.3,20.7]], lt:0.5, ldy:-10,
+    what:'config::resolve merges environment variables and optional ~/.config/gpuflo/config.toml with fixed precedence.',
+    cite:[['src/config.rs',242,'resolve']],
+    payload:null },
+  { id:'p3', kind:'control', from:'runb', to:'monitor',
+    label:'Monitor::start / shutdown',
+    pts:[[7.5,20.8],[8.4,17.5],[9,13.8]], lt:0.55, ldy:-12,
+    what:'The runner starts the monitor for every surface, receives its events, and drives bounded shutdown.',
+    cite:[['src/monitor.rs',321,'Monitor::start'],['src/run.rs',30,'orchestration']],
+    payload:{r:2.6, dur:4.5, kind:'control'} },
+  { id:'p4', kind:'control', from:'runb', to:'uimod',
+    label:'TUI session',
+    pts:[[8.3,20.9],[10.7,19.9],[12.9,18.6]], lt:0.55, ldy:16,
+    what:'The interactive route: acquire the terminal, run the input/render loop, restore on exit.',
+    cite:[['src/ui/mod.rs',55,'interactive run'],['src/terminal.rs',65,'acquire']],
+    payload:null },
+  { id:'p5', kind:'control', from:'monitor', to:'kernel',
+    label:'lanes: 250 ms / 1 s',
+    pts:[[8.6,12.6],[6,9.6],[4.3,7.1]], lt:0.35, ldy:18,
+    what:'The coordinator schedules independent kernel lanes and rejects late or timed-out results.',
+    cite:[['src/monitor.rs',915,'coordinator run loop']],
+    payload:{r:2.4, dur:3.5, kind:'control'} },
+  { id:'p6', kind:'control', from:'monitor', to:'process',
+    label:'on-demand scan',
+    pts:[[10,12.4],[11.8,9.5],[12.9,7.1]], lt:0.5, ldy:-10,
+    what:'Opening the TUI process overlay sends SetProcessScope; only then does the process lane scan /proc and KFD.',
+    cite:[['src/source/process.rs',158,'scan()']],
+    payload:null },
+  { id:'p7', kind:'control', from:'uimod', to:'monitor',
+    label:'SetProcessScope',
+    pts:[[12.4,17.9],[10.4,14.9]], lt:0.8, ldy:-12,
+    what:'User-only commands flow back: process scope for the overlay, peak resets. The UI never alters canonical telemetry.',
+    cite:[['src/ui/mod.rs',141,'UiState'],['src/ui/mod.rs',396,'selection resolver']],
+    payload:null },
+  { id:'p8', kind:'control', from:'runb', to:'terminalb',
+    label:'',
+    pts:[[8.4,21.2],[9.6,21.2]], lt:0.5, ldy:16,
+    what:'TerminalGuard restores cursor, raw mode, and screen on every exit path, before fatal diagnostics print.',
+    cite:[['src/terminal.rs',54,'TerminalGuard'],['tests/pty_restoration.rs',162,'PTY proof']],
+    payload:null },
+
+  // Data
+  { id:'p9', kind:'data', from:'gpu', to:'sysfs',
+    label:'amdgpu driver: gpu_metrics + hwmon',
+    pts:[[26.7,1.7],[15,-0.4],[4,1.4]], lt:0.5, ldy:-10,
+    what:'The kernel driver exposes everything gpuflo knows: metrics blob, memory counters, temperatures, power, clocks, fault evidence.',
+    cite:[['src/source/kernel.rs',571,'fast reads'],['src/source/kernel.rs',667,'slow reads']],
+    payload:{r:3.2, dur:6, kind:'data'} },
+  { id:'p10', kind:'data', from:'sysfs', to:'kernel',
+    label:'sysfs reads (no root)',
+    pts:[[4,1.6],[4.3,7]], lt:0.5, ldy:-10,
+    what:'Plain file reads: busy %, VRAM/GTT, hwmon temps and power, gpu_metrics with per-field fallbacks.',
+    cite:[['src/source/kernel.rs',571,'fast collection']],
+    payload:{r:2.8, dur:2.8, kind:'data'} },
+  { id:'p11', kind:'data', from:'amdsmilib', to:'amdsmi',
+    label:'FFI: activity + VRAM',
+    pts:[[10,1.6],[8.9,7]], lt:0.5, ldy:-10,
+    what:'GFX/UMC activity and VRAM use/total copied out of the C library into owned Rust samples.',
+    cite:[['src/source/amdsmi.rs',289,'sample()']],
+    payload:{r:2.4, dur:4, kind:'data'} },
+  { id:'p12', kind:'data', from:'prockfd', to:'process',
+    label:'fdinfo + KFD accounting',
+    pts:[[16,1.6],[12.9,7]], lt:0.5, ldy:-10,
+    what:'DRM resident VRAM/GTT per fd, and KFD vram_<gpuid> — reported separately, never reconciled.',
+    cite:[['src/source/process.rs',158,'scan()']],
+    payload:{r:2.4, dur:4.5, kind:'data'} },
+  { id:'p13', kind:'data', from:'kernel', to:'normalize',
+    label:'Kernel samples',
+    pts:[[4.4,7.2],[4.8,13.5]], lt:0.3, ldy:-12,
+    what:'Raw samples cross the monitor lanes into normalization, keeping typed unavailable-evidence states.',
+    cite:[['src/normalize.rs',69,'kernel_fast'],['src/source/mod.rs',101,'KernelFastSample']],
+    payload:{r:2.8, dur:2.6, kind:'data'} },
+  { id:'p14', kind:'data', from:'amdsmi', to:'normalize',
+    label:'AmdSmiSample',
+    pts:[[8.9,7.2],[6.6,10.6],[5.5,13.5]], lt:0.4, ldy:16,
+    what:'Enrichment batches carry a secondary source origin; the reducer keeps kernel data authoritative.',
+    cite:[['src/normalize.rs',200,'amdsmi']],
+    payload:{r:2.4, dur:4.2, kind:'data'} },
+  { id:'p15', kind:'data', from:'process', to:'reducer',
+    label:'ProcessSample',
+    pts:[[13,7.2],[16.8,9.8],[19,12]], lt:0.55, ldy:-10,
+    what:'Process rows reach only the private RenderModel; public JSON snapshots never include them.',
+    cite:[['src/state/mod.rs',173,'RenderModel']],
+    payload:{r:2.4, dur:4.8, kind:'data'} },
+  { id:'p16', kind:'data', from:'normalize', to:'reducer',
+    label:'MetricBatch + health',
+    pts:[[5.8,13.6],[11.5,10.9],[17.6,12.4]], lt:0.5, ldy:-10,
+    what:'One unit-normalized vocabulary for all sources; the reducer applies precedence, freshness, and late-data policy.',
+    cite:[['src/state/mod.rs',86,'MetricBatch'],['src/state/reducer.rs',462,'apply_batch_at']],
+    payload:{r:3, dur:3.4, kind:'data'} },
+  { id:'p17', kind:'data', from:'reducer', to:'monitor',
+    label:'Snapshot + RenderModel',
+    pts:[[17.6,13.2],[13.5,12.3],[10.4,13.1]], lt:0.22, ldy:-12,
+    what:'Every 250 ms production tick (after a two-fast-sample priming period) the reducer assembles both projections.',
+    cite:[['src/state/reducer.rs',690,'assemble()'],['src/monitor.rs',1070,'publication']],
+    payload:{r:3, dur:3, kind:'data'} },
+  { id:'p18', kind:'data', from:'monitor', to:'persist',
+    label:'DailySummaryRecord',
+    pts:[[10.4,14.3],[12.3,14]], lt:0.55, ldy:26,
+    what:'Per-day activity/memory peaks and energy deltas, atomically stored; pending writes coalesce.',
+    cite:[['src/state/history.rs',84,'DailyAccumulator'],['src/persist.rs',67,'atomic store']],
+    payload:{r:2.4, dur:5.5, kind:'data'} },
+  { id:'p19', kind:'data', from:'monitor', to:'runb',
+    label:'snapshot events',
+    pts:[[7.9,14.9],[7.4,17.7],[7.3,20.3]], lt:0.72, ldy:-14,
+    what:'The runner receives monitor events and routes them to the active surface; one-shot modes wait for the first exportable snapshot.',
+    cite:[['src/run.rs',199,'json_stream loop']],
+    payload:{r:2.6, dur:3.2, kind:'data'} },
+  { id:'p20', kind:'data', from:'monitor', to:'uimod',
+    label:'',
+    pts:[[10.3,14.9],[12,16.8],[12.8,17.9]], lt:0.5, ldy:18,
+    what:'The TUI takes only the newest private render model per frame; a slow UI never backs up the monitor.',
+    cite:[['src/monitor.rs',1070,'render mailbox']],
+    payload:{r:2.4, dur:3.6, kind:'data'} },
+  { id:'p21', kind:'data', from:'runb', to:'outputb',
+    label:'',
+    pts:[[8.3,20.4],[9.4,19.5],[9.9,18.9]], lt:0.5, ldy:-12,
+    what:'--once / --tiny / --json write one record and exit; --json-stream writes one compact line per tick, flushing each.',
+    cite:[['src/output.rs',30,'NDJSON writer'],['src/run.rs',199,'stream loop']],
+    payload:{r:2.6, dur:3.4, kind:'data'} },
+  { id:'p22', kind:'data', from:'outputb', to:'noctalia',
+    label:'NDJSON: one Snapshot / 250 ms',
+    pts:[[11.1,18.3],[15.9,16.6],[20,17.9],[22.5,20]], lt:0.26, ldy:-10,
+    what:'schema_version 1, sampled_at, all GPUs, monotonic sequence. Sequence gaps reveal coalesced snapshots; broken pipe = consumer shutdown, treated as success.',
+    cite:[['tests/output_contract.rs',140,'schema envelope'],['plugins/noctalia/gpuflo/service.luau',7,'runStream consumer']],
+    payload:{r:3.4, dur:4.2, kind:'data'} },
+  { id:'p23', kind:'data', from:'reducer', to:'model',
+    label:'assemble() → public Snapshot',
+    pts:[[19.4,14.6],[20.7,15.7]], lt:0.5, ldy:16,
+    what:'The versioned public shape: no nulls, no non-finite numbers, RFC3339 timestamps, explicit stale states.',
+    cite:[['src/model.rs',410,'Snapshot'],['tests/output_contract.rs',140,'contract tests']],
+    payload:{r:2.4, dur:4.6, kind:'data'} },
+
+  // Dependency edges (unlabeled, faint)
+  { id:'d1', kind:'dep', from:'uimod', to:'widgets',  pts:[[13.8,18.4],[14.9,18.9]], label:'', what:'', cite:[], payload:null },
+  { id:'d2', kind:'dep', from:'outputb', to:'model',  pts:[[11.2,18],[15.5,16.4],[19.9,16.1]], label:'', what:'', cite:[], payload:null },
+  { id:'d3', kind:'dep', from:'reducer', to:'statesup', pts:[[20.5,13.1],[22.1,12.9]], label:'', what:'', cite:[], payload:null },
+  { id:'d4', kind:'dep', from:'widgets', to:'uihelp', pts:[[16.5,20.2],[18.3,20.9]], label:'', what:'', cite:[], payload:null },
+
+  // CI / delivery
+  { id:'b1', kind:'build', from:'cib', to:'testsb',
+    label:'cargo test --all-targets',
+    pts:[[29.3,16],[27.8,16]], lt:0.5, ldy:-10,
+    what:'ci.yml runs fmt, clippy, all-target tests, MSRV 1.96, and an aarch64 compile check on every push.',
+    cite:[['.github/workflows/ci.yml',1,'quality gate']],
+    payload:null },
+  { id:'b2', kind:'build', from:'cib', to:'siteb',
+    label:'pages deploy',
+    pts:[[29.3,16.6],[28.4,18.4],[27.4,19.3]], lt:0.5, ldy:16,
+    what:'pages.yml publishes site/ to GitHub Pages; release.yml ships the checksummed x86_64 archive install.sh fetches.',
+    cite:[['.github/workflows/pages.yml',1,'deploy'],['install.sh',1,'fetch + verify']],
+    payload:null },
+];
+
+/* ================= Scene engines — three themes + view controls ================= */
+const SVGNS = 'http://www.w3.org/2000/svg';
+const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const TW = 27, FS = 46;
+const GC = { x: 14.7, y: 11.1 };      // grid center: rotation pivot
+const LGT = [-0.53, 0.85];            // fixed light direction (grid space)
+let ROT = 0;                          // view rotation, degrees
+let TILT = 0.5;                       // THh/TW ratio: 0.5 = classic 2:1 iso
+let ISO_BOX = {};                     // sticky per-theme viewBox while dragging the view
+let VIEW = { k: 1, cx: 0.5, cy: 0.5 }; // camera: zoom factor + center (fractions of base box)
+let BASE_BOX = null;                  // base viewBox of the current scene
+let BLDG_LABELS = null;
+let selectedId = null;
+let currentTheme = 'iso';
+
+function rotVec(v) {
+  const r = ROT * Math.PI / 180, c = Math.cos(r), s = Math.sin(r);
+  return [v[0] * c - v[1] * s, v[0] * s + v[1] * c];
+}
+function isoP(gx, gy, z) {
+  const r = ROT * Math.PI / 180, c = Math.cos(r), s = Math.sin(r);
+  const dx = gx - GC.x, dy = gy - GC.y;
+  const rx = dx * c - dy * s, ry = dx * s + dy * c;
+  const hs = Math.max(0.12, 2 * (1 - TILT));
+  return [(rx - ry) * TW, (rx + ry) * TW * TILT - (z || 0) * hs];
+}
+function flat(gx, gy) { return [gx * FS, gy * FS]; }
+function pts(list) { return list.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' '); }
+function el(tag, attrs, parent) {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function shade(hex, f) {
+  const n = parseInt(hex.slice(1), 16);
+  const ch = s => Math.max(0, Math.min(255, Math.round(s * f)));
+  return 'rgb(' + ch(n >> 16) + ',' + ch((n >> 8) & 255) + ',' + ch(n & 255) + ')';
+}
+function nodeR(b) { return 5 + b.h * 0.14; }
+function mulberry(seed) {
+  return function () {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function polylinePoint(ptsArr, t) {
+  const segs = [];
+  let total = 0;
+  for (let i = 1; i < ptsArr.length; i++) {
+    const dx = ptsArr[i][0] - ptsArr[i - 1][0], dy = ptsArr[i][1] - ptsArr[i - 1][1];
+    const len = Math.hypot(dx, dy); segs.push(len); total += len;
+  }
+  let dist = t * total;
+  for (let i = 1; i < ptsArr.length; i++) {
+    if (dist <= segs[i - 1] || i === ptsArr.length - 1) {
+      const f = segs[i - 1] ? dist / segs[i - 1] : 0;
+      return [ptsArr[i - 1][0] + (ptsArr[i][0] - ptsArr[i - 1][0]) * f,
+              ptsArr[i - 1][1] + (ptsArr[i][1] - ptsArr[i - 1][1]) * f];
+    }
+    dist -= segs[i - 1];
+  }
+  return ptsArr[ptsArr.length - 1];
+}
+function smoothD(xy) {
+  if (xy.length < 3)
+    return xy.map((q, i) => (i ? 'L' : 'M') + q[0].toFixed(1) + ',' + q[1].toFixed(1)).join(' ');
+  let d = 'M' + xy[0][0].toFixed(1) + ',' + xy[0][1].toFixed(1);
+  for (let i = 0; i < xy.length - 1; i++) {
+    const p0 = xy[Math.max(0, i - 1)], p1 = xy[i], p2 = xy[i + 1], p3 = xy[Math.min(xy.length - 1, i + 2)];
+    const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
+    const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
+    d += ' C' + [c1[0], c1[1], c2[0], c2[1], p2[0], p2[1]].map(v => v.toFixed(1)).join(',');
+  }
+  return d;
+}
+
+/* ---- hover isolation: dim everything not connected ---- */
+function pathLit(p) { return { b: new Set([p.from, p.to]), p: new Set([p.id]) }; }
+function buildingLit(id) {
+  const b = new Set([id]), ps = new Set();
+  for (const p of P)
+    if (p.from === id || p.to === id) { ps.add(p.id); b.add(p.from); b.add(p.to); }
+  return { b, p: ps };
+}
+function applyLit(svg, lit) {
+  svg.classList.add('focus-dim');
+  svg.querySelectorAll('.bldg-g').forEach(g => g.classList.toggle('lit', lit.b.has(g.getAttribute('data-id'))));
+  svg.querySelectorAll('.b-label').forEach(t => t.classList.toggle('lit', lit.b.has(t.getAttribute('data-for'))));
+  svg.querySelectorAll('.path-g, .p-label').forEach(n => n.classList.toggle('lit', lit.p.has(n.getAttribute('data-pid'))));
+  svg.querySelectorAll('.payload').forEach(n => n.classList.toggle('lit',
+    lit.p.has(n.getAttribute('data-pid')) || lit.b.has(n.getAttribute('data-for'))));
+}
+function clearLit(svg) {
+  svg.classList.remove('focus-dim');
+  svg.querySelectorAll('.lit').forEach(n => n.classList.remove('lit'));
+}
+
+/* ---- shared drawing ---- */
+function drawMarkers(svg) {
+  const defs = el('defs', {}, svg);
+  for (const k in KIND) {
+    const m = el('marker', { id: 'arr-' + k, viewBox: '0 0 8 8', refX: 7, refY: 4,
+                             markerWidth: 6.5, markerHeight: 6.5, orient: 'auto-start-reverse' }, defs);
+    el('path', { d: 'M0,0.6 L7.6,4 L0,7.4 Z', fill: KIND[k].color }, m);
+  }
+  return defs;
+}
+function bById(id) { return B.find(x => x.id === id); }
+function trimWalk(list, inside) {
+  // list[0] sits inside the region; cut the polyline where it first exits
+  let cut = null, idx = 0;
+  for (let i = 0; i < list.length - 1 && !cut; i++) {
+    const a = list[i], b2 = list[i + 1];
+    if (inside(b2)) continue;
+    let lo = 0, hi = 1;
+    for (let k = 0; k < 24; k++) {
+      const mid = (lo + hi) / 2;
+      const q = [a[0] + (b2[0] - a[0]) * mid, a[1] + (b2[1] - a[1]) * mid];
+      if (inside(q)) lo = mid; else hi = mid;
+    }
+    cut = [a[0] + (b2[0] - a[0]) * hi, a[1] + (b2[1] - a[1]) * hi];
+    idx = i;
+  }
+  return cut ? [cut, ...list.slice(idx + 1)] : list;
+}
+function trimAt(list, inside, fromEnd) {
+  const l = fromEnd ? list.slice().reverse() : list.slice();
+  const r = trimWalk(l, inside);
+  return fromEnd ? r.reverse() : r;
+}
+function rectInside(b, m) {
+  return q => q[0] > b.gx - m && q[0] < b.gx + b.w + m && q[1] > b.gy - m && q[1] < b.gy + b.d + m;
+}
+function circInside(c, r) { return q => Math.hypot(q[0] - c[0], q[1] - c[1]) < r; }
+function drawPaths(svg, project, curved, mode) {
+  const layer = el('g', { fill: 'none' }, svg);
+  const labelLayer = el('g', {}, svg);
+  for (const p of P) {
+    const k = KIND[p.kind];
+    // snap endpoints to the actual buildings, then trim so lines meet their walls
+    const src = bById(p.from), dst = bById(p.to);
+    const sc = [src.gx + src.w / 2, src.gy + src.d / 2];
+    const dc = [dst.gx + dst.w / 2, dst.gy + dst.d / 2];
+    let gpts = [sc, ...p.pts.slice(1, -1), dc];
+    let xy;
+    if (mode === 'rect') {
+      gpts = trimAt(gpts, rectInside(src, 0.15), false);
+      gpts = trimAt(gpts, rectInside(dst, 0.4), true);
+      xy = gpts.map(pt => project(pt[0], pt[1]));
+    } else {
+      xy = gpts.map(pt => project(pt[0], pt[1]));
+      xy = trimAt(xy, circInside(project(sc[0], sc[1]), nodeR(src) + 4), false);
+      xy = trimAt(xy, circInside(project(dc[0], dc[1]), nodeR(dst) + 8), true);
+    }
+    const d = curved ? smoothD(xy)
+      : xy.map((q, i) => (i ? 'L' : 'M') + q[0].toFixed(1) + ',' + q[1].toFixed(1)).join(' ');
+    const g = el('g', { class: 'path-g', 'data-pid': p.id }, layer);
+    const attrs = { d, stroke: k.color, 'stroke-width': p.kind === 'dep' ? 1.1 : 1.7,
+                    id: 'path-' + p.id, 'stroke-opacity': p.kind === 'dep' ? 0.55 : 0.9,
+                    'marker-end': 'url(#arr-' + p.kind + ')', 'stroke-linejoin': 'round' };
+    if (k.dash) attrs['stroke-dasharray'] = k.dash;
+    el('path', attrs, g);
+    el('path', { d, class: 'hit', stroke: '#000', 'stroke-opacity': 0, 'stroke-width': 16 }, g);
+    g.addEventListener('mouseenter', () => applyLit(svg, pathLit(p)));
+    g.addEventListener('mouseleave', () => clearLit(svg));
+    if (p.label) {
+      const t = p.lt == null ? 0.5 : p.lt;
+      const [mx, my] = polylinePoint(xy, t);
+      const txt = el('text', { x: mx, y: my + (p.ldy || -10), 'text-anchor': 'middle',
+                               class: 'p-label', 'data-pid': p.id,
+                               fill: k.color, 'font-size': 10,
+                               'font-family': 'ui-monospace, SF Mono, Menlo, Consolas, monospace',
+                               'paint-order': 'stroke', stroke: '#0E1219', 'stroke-width': 4 }, labelLayer);
+      txt.textContent = p.label;
+    }
+  }
+  return labelLayer;
+}
+function drawPayloads(svg) {
+  if (REDUCED) return;
+  for (const p of P) {
+    if (!p.payload) continue;
+    const k = KIND[p.payload.kind];
+    const dot = el('circle', { r: p.payload.r, fill: shade(k.color, 1.35),
+                               stroke: '#0A0D12', 'stroke-width': 0.8,
+                               class: 'payload', 'data-pid': p.id }, svg);
+    const am = el('animateMotion', { dur: p.payload.dur + 's', repeatCount: 'indefinite', rotate: '0' }, dot);
+    el('mpath', { href: '#path-' + p.id }, am);
+  }
+}
+function wireNode(svg, g, b) {
+  g.addEventListener('click', () => select(b.id));
+  g.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(b.id); }
+  });
+  g.addEventListener('mouseenter', () => applyLit(svg, buildingLit(b.id)));
+  g.addEventListener('mouseleave', () => clearLit(svg));
+}
+function nodeLabel(x, y, b) {
+  const c = CAT[b.cat].color;
+  const t = el('text', { x, y, 'text-anchor': 'middle', class: 'b-label', 'data-for': b.id,
+                         fill: shade(c, 1.55), 'font-size': 11.5,
+                         'font-family': 'ui-monospace, SF Mono, Menlo, Consolas, monospace',
+                         'paint-order': 'stroke', stroke: '#0E1219', 'stroke-width': 4 }, BLDG_LABELS);
+  t.textContent = b.name;
+}
+function finishScene(svg, key) {
+  const bb = svg.getBBox();
+  let box = [bb.x - 16, bb.y - 16, bb.width + 32, bb.height + 32];
+  if (key && ISO_BOX[key]) {
+    const o = ISO_BOX[key];
+    const x0 = Math.min(box[0], o[0]), y0 = Math.min(box[1], o[1]);
+    const x1 = Math.max(box[0] + box[2], o[0] + o[2]);
+    const y1 = Math.max(box[1] + box[3], o[1] + o[3]);
+    box = [x0, y0, x1 - x0, y1 - y0];
+  }
+  if (key) ISO_BOX[key] = box;
+  BASE_BOX = box;
+  applyView(svg);
+}
+/* ---- Scene camera: wheel zoom + drag pan on top of the base viewBox ---- */
+function clampView() {
+  VIEW.k = Math.min(8, Math.max(1, VIEW.k));
+  const half = 0.5 / VIEW.k;
+  VIEW.cx = Math.min(1 - half, Math.max(half, VIEW.cx));
+  VIEW.cy = Math.min(1 - half, Math.max(half, VIEW.cy));
+}
+function applyView(svg) {
+  svg = svg || document.querySelector('#scene-holder svg');
+  if (!svg || !BASE_BOX) return;
+  clampView();
+  const [bx, by, bw, bh] = BASE_BOX;
+  const w = bw / VIEW.k, h = bh / VIEW.k;
+  svg.setAttribute('viewBox', [bx + VIEW.cx * bw - w / 2, by + VIEW.cy * bh - h / 2, w, h]
+    .map(v => v.toFixed(1)).join(' '));
+}
+function zoomAt(f, px, py) {
+  const svg = document.querySelector('#scene-holder svg');
+  if (!svg || !BASE_BOX) return;
+  const k0 = VIEW.k;
+  VIEW.k = Math.min(8, Math.max(1, VIEW.k * f));
+  if (px != null) {                    // keep the point under the cursor fixed
+    const r = svg.getBoundingClientRect();
+    const fx = (px - r.left) / r.width, fy = (py - r.top) / r.height;
+    VIEW.cx += (fx - 0.5) * (1 / k0 - 1 / VIEW.k);
+    VIEW.cy += (fy - 0.5) * (1 / k0 - 1 / VIEW.k);
+  }
+  applyView(svg);
+}
+function initSceneView() {
+  const holder = document.getElementById('scene-holder');
+  holder.addEventListener('wheel', e => {
+    e.preventDefault();
+    zoomAt(Math.pow(1.0018, -e.deltaY), e.clientX, e.clientY);
+  }, { passive: false });
+  holder.addEventListener('dblclick', () => { VIEW = { k: 1, cx: 0.5, cy: 0.5 }; applyView(); });
+  let pid = null, sx = 0, sy = 0, panned = false;
+  holder.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    pid = e.pointerId; sx = e.clientX; sy = e.clientY; panned = false;
+  });
+  holder.addEventListener('pointermove', e => {
+    if (e.pointerId !== pid) return;
+    if (!panned && Math.hypot(e.clientX - sx, e.clientY - sy) < 4) return;
+    const svg = holder.querySelector('svg');
+    if (!svg || !BASE_BOX) return;
+    if (!panned) { panned = true; holder.classList.add('panning'); holder.setPointerCapture(pid); }
+    const r = svg.getBoundingClientRect();
+    VIEW.cx -= (e.clientX - sx) / r.width / VIEW.k;
+    VIEW.cy -= (e.clientY - sy) / r.height / VIEW.k;
+    sx = e.clientX; sy = e.clientY;
+    applyView(svg);
+  });
+  const endPan = e => {
+    if (e.pointerId !== pid) return;
+    pid = null;
+    if (panned) holder.classList.remove('panning');
+  };
+  holder.addEventListener('pointerup', endPan);
+  holder.addEventListener('pointercancel', endPan);
+  holder.addEventListener('click', e => {   // swallow the click that ends a pan
+    if (panned) { e.stopPropagation(); e.preventDefault(); panned = false; }
+  }, true);
+  document.getElementById('zoom-in').addEventListener('click', () => zoomAt(1.3));
+  document.getElementById('zoom-out').addEventListener('click', () => zoomAt(1 / 1.3));
+}
+
+/* ---- Legend: minimize + drag within the scene card ---- */
+function initLegendUI() {
+  const legend = document.getElementById('legend');
+  const head = document.getElementById('legend-head');
+  const toggle = document.getElementById('legend-toggle');
+  toggle.addEventListener('click', e => {
+    e.stopPropagation();
+    const min = legend.classList.toggle('min');
+    toggle.textContent = min ? '+' : '\u2013';
+    toggle.setAttribute('aria-expanded', String(!min));
+    toggle.setAttribute('aria-label', min ? 'Expand legend' : 'Minimize legend');
+  });
+  let pid = null, ox = 0, oy = 0;
+  head.addEventListener('pointerdown', e => {
+    if (e.button !== 0 || e.target === toggle) return;
+    if (getComputedStyle(legend).position !== 'absolute') return;  // static layout on small screens
+    pid = e.pointerId;
+    const r = legend.getBoundingClientRect();
+    ox = e.clientX - r.left; oy = e.clientY - r.top;
+    head.setPointerCapture(pid);
+    e.preventDefault();
+  });
+  head.addEventListener('pointermove', e => {
+    if (e.pointerId !== pid) return;
+    const card = legend.offsetParent.getBoundingClientRect();
+    const r = legend.getBoundingClientRect();
+    legend.style.left = Math.min(Math.max(e.clientX - card.left - ox, 8), card.width - r.width - 8) + 'px';
+    legend.style.top = Math.min(Math.max(e.clientY - card.top - oy, 8), card.height - r.height - 8) + 'px';
+  });
+  const endDrag = e => { if (e.pointerId === pid) pid = null; };
+  head.addEventListener('pointerup', endDrag);
+  head.addEventListener('pointercancel', endDrag);
+}
+
+
+/* ================= Theme 1: isometric city ================= */
+function wallInfo(a, b) {
+  // outward normal for footprint edge a->b (footprint wound c0..c3)
+  const dir = [b[0] - a[0], b[1] - a[1]];
+  const len = Math.hypot(dir[0], dir[1]) || 1;
+  const n = [dir[1] / len, -dir[0] / len];
+  const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  const p0 = isoP(mid[0], mid[1], 0), p1 = isoP(mid[0] + n[0] * 0.1, mid[1] + n[1] * 0.1, 0);
+  const visible = (p1[1] - p0[1]) > 0.0001;   // faces the viewer (screen-down)
+  const nr = rotVec(n);
+  const f = 0.55 + 0.3 * (nr[0] * LGT[0] + nr[1] * LGT[1]);  // light-based shade
+  return { visible, f };
+}
+function boxFaces(g, gx, gy, w, d, z0, h, color, cls) {
+  const fp = [[gx, gy], [gx + w, gy], [gx + w, gy + d], [gx, gy + d]];
+  const zt = z0 + h;
+  for (let i = 0; i < 4; i++) {
+    const a = fp[i], b = fp[(i + 1) % 4];
+    const wi = wallInfo(a, b);
+    if (!wi.visible) continue;
+    const poly = [isoP(a[0], a[1], zt), isoP(b[0], b[1], zt), isoP(b[0], b[1], z0), isoP(a[0], a[1], z0)];
+    el('polygon', { points: pts(poly), fill: shade(color, wi.f), class: cls + ' b-face' }, g);
+  }
+  const top = fp.map(q => isoP(q[0], q[1], zt));
+  el('polygon', { points: pts(top), fill: shade(color, 1.18), class: cls + ' b-face b-top',
+                  stroke: shade(color, 1.5), 'stroke-width': 0.7 }, g);
+}
+function windows(g, gx, gy, w, d, h, color, rows, cols) {
+  const fp = [[gx, gy], [gx + w, gy], [gx + w, gy + d], [gx, gy + d]];
+  let best = null;
+  for (let i = 0; i < 4; i++) {
+    const a = fp[i], b = fp[(i + 1) % 4];
+    const wi = wallInfo(a, b);
+    if (wi.visible && (!best || wi.f > best.f)) best = { a, b, f: wi.f };
+  }
+  if (!best) return;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if ((r * 7 + c * 3 + Math.round(gx * 5 + gy * 3)) % 4 === 0) continue;
+      const fc = (c + 0.7) / (cols + 0.7);
+      const px = best.a[0] + (best.b[0] - best.a[0]) * fc;
+      const py = best.a[1] + (best.b[1] - best.a[1]) * fc;
+      const [x, y] = isoP(px, py, h * (0.18 + 0.72 * r / rows));
+      el('rect', { x: x - 1.6, y: y - 2.6, width: 3.2, height: 2.2,
+                   fill: shade(color, 1.75), opacity: 0.85, class: 'b-face' }, g);
+    }
+  }
+}
+function drawBuilding(svg, b) {
+  const c = CAT[b.cat].color;
+  const g = el('g', { class: 'bldg-g', tabindex: 0, role: 'button',
+                      'aria-label': b.name, 'data-id': b.id }, svg);
+  const cx = b.gx + b.w / 2, cy = b.gy + b.d / 2;
+
+  if (b.kind === 'pad') {
+    boxFaces(g, b.gx, b.gy, b.w, b.d, 0, b.h, c, '');
+    const [bx, by] = isoP(cx, cy, b.h);
+    el('line', { x1: bx, y1: by, x2: bx, y2: by - 16, stroke: shade(c, 1.3), 'stroke-width': 1.6 }, g);
+    el('circle', { cx: bx, cy: by - 18, r: 3, fill: shade(c, 1.7), class: 'b-face' }, g);
+  } else if (b.kind === 'tower3') {
+    boxFaces(g, b.gx, b.gy, b.w, b.d, 0, b.h * 0.42, c, '');
+    boxFaces(g, b.gx + 0.28, b.gy + 0.28, b.w - 0.56, b.d - 0.56, b.h * 0.42, b.h * 0.36, c, '');
+    boxFaces(g, b.gx + 0.62, b.gy + 0.62, b.w - 1.24, b.d - 1.24, b.h * 0.78, b.h * 0.22, c, '');
+    windows(g, b.gx, b.gy, b.w, b.d, b.h * 0.4, c, 4, 5);
+    const [ax, ay] = isoP(cx, cy, b.h);
+    el('line', { x1: ax, y1: ay, x2: ax, y2: ay - 20, stroke: shade(c, 1.4), 'stroke-width': 1.4 }, g);
+    el('circle', { cx: ax, cy: ay - 21, r: 2.2, fill: '#FFD9D4' }, g);
+  } else if (b.kind === 'tower2') {
+    boxFaces(g, b.gx, b.gy, b.w, b.d, 0, b.h * 0.62, c, '');
+    boxFaces(g, b.gx + 0.24, b.gy + 0.24, b.w - 0.48, b.d - 0.48, b.h * 0.62, b.h * 0.38, c, '');
+    windows(g, b.gx, b.gy, b.w, b.d, b.h * 0.58, c, 3, 4);
+  } else if (b.kind === 'slab') {
+    boxFaces(g, b.gx, b.gy, b.w, b.d, 0, b.h, c, '');
+    boxFaces(g, b.gx + 0.3, b.gy + 0.3, b.w - 0.6, b.d - 0.6, b.h, b.h * 0.1, c, '');
+    windows(g, b.gx, b.gy, b.w, b.d, b.h * 0.94, c, 3, 6);
+  } else if (b.kind === 'hall') {
+    boxFaces(g, b.gx, b.gy, b.w, b.d, 0, b.h, c, '');
+    windows(g, b.gx, b.gy, b.w, b.d, b.h * 0.9, c, 2, 4);
+  } else if (b.kind === 'kiosk' || b.kind === 'depot') {
+    boxFaces(g, b.gx, b.gy, b.w, b.d, 0, b.h, c, '');
+  } else if (b.kind === 'gate') {
+    boxFaces(g, b.gx, b.gy, b.w * 0.3, b.d, 0, b.h, c, '');
+    boxFaces(g, b.gx + b.w * 0.7, b.gy, b.w * 0.3, b.d, 0, b.h, c, '');
+    boxFaces(g, b.gx, b.gy, b.w, b.d, b.h * 0.72, b.h * 0.28, c, '');
+  } else if (b.kind === 'mast') {
+    boxFaces(g, b.gx, b.gy, b.w, b.d, 0, b.h * 0.55, c, '');
+    const [mx, my] = isoP(cx, cy, b.h * 0.55);
+    const topY = my - b.h * 0.75;
+    el('line', { x1: mx, y1: my, x2: mx, y2: topY, stroke: shade(c, 1.25), 'stroke-width': 2 }, g);
+    el('line', { x1: mx - 7, y1: topY + 10, x2: mx + 7, y2: topY + 10, stroke: shade(c, 1.25), 'stroke-width': 1.4 }, g);
+    el('circle', { cx: mx, cy: topY - 2, r: 2.4, fill: shade(c, 1.8) }, g);
+    if (!REDUCED) {
+      for (let i = 0; i < 2; i++) {
+        const ring = el('circle', { cx: mx, cy: topY - 2, r: 3, fill: 'none',
+                                    stroke: shade(c, 1.6), 'stroke-width': 1, opacity: 0.8,
+                                    class: 'payload', 'data-for': b.id }, g);
+        el('animate', { attributeName: 'r', from: 3, to: 16, dur: '2.4s',
+                        begin: (i * 1.2) + 's', repeatCount: 'indefinite' }, ring);
+        el('animate', { attributeName: 'opacity', from: 0.8, to: 0, dur: '2.4s',
+                        begin: (i * 1.2) + 's', repeatCount: 'indefinite' }, ring);
+      }
+    }
+  } else if (b.kind === 'screen') {
+    boxFaces(g, b.gx, b.gy, b.w, b.d, 0, b.h, c, '');
+    const wi = wallInfo([b.gx + b.w, b.gy + b.d], [b.gx, b.gy + b.d]);
+    if (wi.visible) {
+      const s0 = isoP(b.gx + 0.25, b.gy + b.d, b.h * 0.82);
+      const s1 = isoP(b.gx + b.w - 0.25, b.gy + b.d, b.h * 0.82);
+      const s2 = isoP(b.gx + b.w - 0.25, b.gy + b.d, b.h * 0.3);
+      const s3 = isoP(b.gx + 0.25, b.gy + b.d, b.h * 0.3);
+      el('polygon', { points: pts([s0, s1, s2, s3]), fill: shade(c, 1.6), opacity: 0.9 }, g);
+      for (let i = 1; i < 4; i++) {
+        const t0 = isoP(b.gx + 0.35, b.gy + b.d, b.h * (0.82 - i * 0.13));
+        const t1 = isoP(b.gx + b.w * (0.35 + 0.14 * i), b.gy + b.d, b.h * (0.82 - i * 0.13));
+        el('line', { x1: t0[0], y1: t0[1], x2: t1[0], y2: t1[1],
+                     stroke: '#0A0D12', 'stroke-width': 1.4, opacity: 0.75 }, g);
+      }
+    }
+  } else if (b.kind === 'plant') {
+    boxFaces(g, b.gx, b.gy, b.w, b.d, 0, b.h * 0.55, c, '');
+    boxFaces(g, b.gx + 0.2, b.gy + 0.3, b.w * 0.32, b.d * 0.4, b.h * 0.55, b.h * 0.45, c, '');
+    boxFaces(g, b.gx + b.w * 0.55, b.gy + 0.3, b.w * 0.32, b.d * 0.4, b.h * 0.55, b.h * 0.3, c, '');
+    windows(g, b.gx, b.gy, b.w, b.d, b.h * 0.5, c, 2, 5);
+  } else if (b.kind === 'sensor') {
+    boxFaces(g, b.gx, b.gy, b.w, b.d, 0, b.h, c, '');
+    for (let i = 0; i < 3; i++) {
+      const [dx, dy] = isoP(b.gx + 0.35 + i * (b.w - 0.7) / 2, b.gy + b.d / 2, b.h);
+      el('line', { x1: dx, y1: dy, x2: dx, y2: dy - 9, stroke: shade(c, 1.3), 'stroke-width': 1.2 }, g);
+      el('circle', { cx: dx, cy: dy - 10.5, r: 2, fill: shade(c, 1.7) }, g);
+    }
+  }
+
+  const [lx, ly] = isoP(cx, cy, 0);
+  const hs = Math.max(0.12, 2 * (1 - TILT));
+  const clearance = (b.kind === 'mast' ? b.h * 1.35 : b.h) * hs + (b.kind === 'tower3' ? 34 : 14);
+  nodeLabel(lx, ly - clearance, b);
+  return g;
+}
+function buildIso(svg) {
+  const G = { x0: -1.8, y0: -1.8, x1: 31.2, y1: 24.0 };
+  const corners = [[G.x0, G.y0], [G.x1, G.y0], [G.x1, G.y1], [G.x0, G.y1]];
+  el('polygon', { points: pts(corners.map(q => isoP(q[0], q[1], 0))),
+                  fill: '#0E1219', stroke: '#202836', 'stroke-width': 1 }, svg);
+  const gridG = el('g', { stroke: '#FFFFFF', 'stroke-opacity': 0.035, 'stroke-width': 1 }, svg);
+  for (let x = Math.ceil(G.x0); x <= G.x1; x++) {
+    const a = isoP(x, G.y0, 0), b2 = isoP(x, G.y1, 0);
+    el('line', { x1: a[0], y1: a[1], x2: b2[0], y2: b2[1] }, gridG);
+  }
+  for (let y = Math.ceil(G.y0); y <= G.y1; y++) {
+    const a = isoP(G.x0, y, 0), b2 = isoP(G.x1, y, 0);
+    el('line', { x1: a[0], y1: a[1], x2: b2[0], y2: b2[1] }, gridG);
+  }
+  for (const pl of PLATES) {
+    const c = CAT[pl.cat].color;
+    const g = el('g', { class: 'plate-g' }, svg);
+    const poly = [isoP(pl.x0, pl.y0, 0), isoP(pl.x1, pl.y0, 0), isoP(pl.x1, pl.y1, 0), isoP(pl.x0, pl.y1, 0)];
+    el('polygon', { points: pts(poly), fill: c, opacity: 0.055 }, g);
+    el('polygon', { points: pts(poly), fill: 'none', stroke: c, 'stroke-opacity': 0.3,
+                    'stroke-width': 1, 'stroke-dasharray': '3 5' }, g);
+    const [tx, ty] = isoP(pl.x0 + 0.3, pl.y1 - 0.1, 0);
+    const t = el('text', { x: tx, y: ty + 12, fill: c, opacity: 0.6, 'font-size': 9.5,
+                           'letter-spacing': '0.15em',
+                           'font-family': 'ui-monospace, SF Mono, Menlo, Consolas, monospace' }, g);
+    t.textContent = pl.name;
+  }
+  drawMarkers(svg);
+  const labelLayer = drawPaths(svg, (x, y) => isoP(x, y, 0), false, 'rect');
+  BLDG_LABELS = el('g', {}, svg);
+  const depth = b => {
+    const c = rotVec([b.gx + b.w / 2 - GC.x, b.gy + b.d / 2 - GC.y]);
+    return c[0] + c[1];
+  };
+  for (const b of B.slice().sort((a, b2) => depth(a) - depth(b2))) {
+    const g = drawBuilding(svg, b);
+    wireNode(svg, g, b);
+  }
+  svg.appendChild(labelLayer);
+  svg.appendChild(BLDG_LABELS);
+  drawPayloads(svg);
+  finishScene(svg, 'iso');
+}
+
+/* ================= Theme 2: flat map (dark chart) ================= */
+function buildMap(svg) {
+  const G = { x0: -1.8, y0: -1.8, x1: 31.2, y1: 24.0 };
+  el('rect', { x: G.x0 * FS, y: G.y0 * FS, width: (G.x1 - G.x0) * FS, height: (G.y1 - G.y0) * FS,
+               fill: '#0A141E', stroke: '#202836', 'stroke-width': 1 }, svg);
+  const grat = el('g', { stroke: '#FFFFFF', 'stroke-opacity': 0.04, 'stroke-width': 1 }, svg);
+  for (let x = Math.ceil(G.x0 / 2) * 2; x <= G.x1; x += 2)
+    el('line', { x1: x * FS, y1: G.y0 * FS, x2: x * FS, y2: G.y1 * FS }, grat);
+  for (let y = Math.ceil(G.y0 / 2) * 2; y <= G.y1; y += 2)
+    el('line', { x1: G.x0 * FS, y1: y * FS, x2: G.x1 * FS, y2: y * FS }, grat);
+  for (const pl of PLATES) {
+    const c = CAT[pl.cat].color;
+    const g = el('g', { class: 'plate-g' }, svg);
+    el('rect', { x: pl.x0 * FS, y: pl.y0 * FS, width: (pl.x1 - pl.x0) * FS, height: (pl.y1 - pl.y0) * FS,
+                 rx: 26, fill: c, 'fill-opacity': 0.05, stroke: c, 'stroke-opacity': 0.3,
+                 'stroke-dasharray': '4 7' }, g);
+    const t = el('text', { x: pl.x0 * FS + 14, y: pl.y0 * FS + 20, fill: c, opacity: 0.6,
+                           'font-size': 9.5, 'letter-spacing': '0.15em',
+                           'font-family': 'ui-monospace, SF Mono, Menlo, Consolas, monospace' }, g);
+    t.textContent = pl.name;
+  }
+  drawMarkers(svg);
+  const labelLayer = drawPaths(svg, flat, true, 'circle');
+  BLDG_LABELS = el('g', {}, svg);
+  for (const b of B) {
+    const c = CAT[b.cat].color;
+    const [cx, cy] = flat(b.gx + b.w / 2, b.gy + b.d / 2);
+    const R = nodeR(b);
+    const g = el('g', { class: 'bldg-g', tabindex: 0, role: 'button',
+                        'aria-label': b.name, 'data-id': b.id }, svg);
+    el('circle', { cx, cy, r: R + 5, fill: c, opacity: 0.13, class: 'b-face' }, g);
+    el('circle', { cx, cy, r: R, fill: shade(c, 0.55), stroke: shade(c, 1.35),
+                   'stroke-width': 1.6, class: 'b-face b-top' }, g);
+    el('circle', { cx, cy, r: Math.max(2, R * 0.3), fill: shade(c, 1.8), class: 'b-face' }, g);
+    if (b.cat === 'mon')  // capital-city double ring
+      el('circle', { cx, cy, r: R + 2.5, fill: 'none', stroke: shade(c, 1.2), 'stroke-width': 1 }, g);
+    nodeLabel(cx, cy + R + 15, b);
+    wireNode(svg, g, b);
+  }
+  svg.appendChild(labelLayer);
+  svg.appendChild(BLDG_LABELS);
+  drawPayloads(svg);
+  finishScene(svg, null);
+}
+
+/* ================= Theme 3: deep space ================= */
+function buildSpace(svg) {
+  const G = { x0: -1.8, y0: -1.8, x1: 31.2, y1: 24.0 };
+  const corners = [[G.x0, G.y0], [G.x1, G.y0], [G.x1, G.y1], [G.x0, G.y1]];
+  el('polygon', { points: pts(corners.map(q => isoP(q[0], q[1], 0))),
+                  fill: '#05070D', stroke: '#1A2334', 'stroke-width': 1 }, svg);
+  const rnd = mulberry(42);
+  const stars = el('g', {}, svg);
+  for (let i = 0; i < 190; i++) {
+    const gx = G.x0 + rnd() * (G.x1 - G.x0), gy = G.y0 + rnd() * (G.y1 - G.y0);
+    const [x, y] = isoP(gx, gy, 0);
+    const big = rnd() > 0.93;
+    el('circle', { cx: x, cy: y, r: big ? 1.6 : 0.5 + rnd() * 0.9,
+                   fill: big ? '#BFE3FF' : '#C9D6E8', opacity: 0.15 + rnd() * 0.6 }, stars);
+  }
+  const defs = drawMarkers(svg);
+  for (const key in CAT) {
+    const gr = el('radialGradient', { id: 'pg-' + key, cx: '32%', cy: '30%', r: '80%' }, defs);
+    el('stop', { offset: '0%', 'stop-color': shade(CAT[key].color, 1.7) }, gr);
+    el('stop', { offset: '45%', 'stop-color': CAT[key].color }, gr);
+    el('stop', { offset: '100%', 'stop-color': shade(CAT[key].color, 0.32) }, gr);
+  }
+  for (const pl of PLATES) {
+    const c = CAT[pl.cat].color;
+    const g = el('g', { class: 'plate-g' }, svg);
+    const cs = [[pl.x0, pl.y0], [pl.x1, pl.y0], [pl.x1, pl.y1], [pl.x0, pl.y1]].map(q => isoP(q[0], q[1], 0));
+    const xs = cs.map(q => q[0]), ys = cs.map(q => q[1]);
+    const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+    const rx = (Math.max(...xs) - Math.min(...xs)) / 2 + 8;
+    const ry = (Math.max(...ys) - Math.min(...ys)) / 2 + 8;
+    el('ellipse', { cx, cy, rx, ry, fill: c, 'fill-opacity': 0.03, stroke: c,
+                    'stroke-opacity': 0.22, 'stroke-dasharray': '3 7' }, g);
+    const t = el('text', { x: cx, y: cy - ry - 6, fill: c, opacity: 0.6, 'font-size': 9.5,
+                           'text-anchor': 'middle', 'letter-spacing': '0.15em',
+                           'font-family': 'ui-monospace, SF Mono, Menlo, Consolas, monospace' }, g);
+    t.textContent = pl.name;
+  }
+  const labelLayer = drawPaths(svg, (x, y) => isoP(x, y, 0), true, 'circle');
+  BLDG_LABELS = el('g', {}, svg);
+  const depth = b => {
+    const c2 = rotVec([b.gx + b.w / 2 - GC.x, b.gy + b.d / 2 - GC.y]);
+    return c2[0] + c2[1];
+  };
+  for (const b of B.slice().sort((a, b2) => depth(a) - depth(b2))) {
+    const c = CAT[b.cat].color;
+    const [cx, cy] = isoP(b.gx + b.w / 2, b.gy + b.d / 2, 0);
+    const R = nodeR(b);
+    const g = el('g', { class: 'bldg-g', tabindex: 0, role: 'button',
+                        'aria-label': b.name, 'data-id': b.id }, svg);
+    if (b.cat === 'hw')   // the GPU glows
+      el('circle', { cx, cy, r: R * 1.8, fill: c, opacity: 0.12, class: 'b-face' }, g);
+    const ringed = b.id === 'reducer';
+    const rx = R * 1.9, ry = R * 0.62;
+    if (ringed) {         // back half of the ring, behind the planet
+      const bg = el('g', { transform: 'rotate(-16 ' + cx + ' ' + cy + ')' }, g);
+      el('ellipse', { cx, cy, rx, ry, fill: 'none',
+                      stroke: shade(c, 1.45), 'stroke-width': 2, opacity: 0.55 }, bg);
+    }
+    el('circle', { cx, cy, r: R, fill: 'url(#pg-' + b.cat + ')', stroke: shade(c, 1.2),
+                   'stroke-opacity': 0.5, 'stroke-width': 0.8, class: 'b-face b-top' }, g);
+    if (ringed) {         // front (lower) half of the ring, over the planet
+      const fg = el('g', { transform: 'rotate(-16 ' + cx + ' ' + cy + ')' }, g);
+      el('path', { d: 'M' + (cx - rx) + ',' + cy + ' A' + rx + ',' + ry + ' 0 0 0 ' + (cx + rx) + ',' + cy,
+                   fill: 'none', stroke: shade(c, 1.45), 'stroke-width': 2 }, fg);
+    }
+    if (b.cat === 'ext')  // external services: stations on a dashed orbit
+      el('circle', { cx, cy, r: R + 5, fill: 'none', stroke: c, 'stroke-opacity': 0.5,
+                     'stroke-dasharray': '2 4' }, g);
+    nodeLabel(cx, cy + R + 16, b);
+    wireNode(svg, g, b);
+  }
+  svg.appendChild(labelLayer);
+  svg.appendChild(BLDG_LABELS);
+  drawPayloads(svg);
+  finishScene(svg, 'space');
+}
+
+/* ================= Theme switching + view widget ================= */
+function setTheme(t) {
+  currentTheme = t;
+  document.querySelectorAll('.theme-switch button').forEach(b =>
+    b.classList.toggle('active', b.getAttribute('data-theme') === t));
+  const v3 = document.getElementById('view-3d');
+  if (v3) v3.style.display = t === 'map' ? 'none' : 'flex';
+  document.body.className = t === 'iso' ? '' : 'theme-' + t;
+  const TAGS = { iso: '// AMD GPU telemetry, one binary',
+                 map: '// a chart of the gpuflo territories',
+                 space: '// the gpuflo system, in orbit' };
+  const dim = document.querySelector('h1 .dim');
+  if (dim) dim.textContent = TAGS[t];
+  const holder = document.getElementById('scene-holder');
+  holder.innerHTML = '';
+  const svg = el('svg', { role: 'img', 'aria-label':
+    'System map of gpuflo: entry and CLI modules, monitor core, telemetry source adapters, state and model, output surfaces, kernel evidence and consumers, GPU hardware, and the control and data paths between them.' }, holder);
+  ({ iso: buildIso, map: buildMap, space: buildSpace })[t](svg);
+  if (selectedId) {
+    const g = svg.querySelector('.bldg-g[data-id="' + selectedId + '"]');
+    if (g) g.classList.add('selected');
+  }
+}
+function initThemes() {
+  document.querySelectorAll('.theme-switch button').forEach(btn =>
+    btn.addEventListener('click', () => setTheme(btn.getAttribute('data-theme'))));
+  const rot = document.getElementById('rot'), tilt = document.getElementById('tilt');
+  const rv = document.getElementById('rot-v'), tv = document.getElementById('tilt-v');
+  let raf = 0;
+  const rerender = () => {
+    if (raf) return;
+    raf = requestAnimationFrame(() => { raf = 0; if (currentTheme !== 'map') setTheme(currentTheme); });
+  };
+  rot.addEventListener('input', () => { ROT = +rot.value; rv.textContent = rot.value + '°'; rerender(); });
+  tilt.addEventListener('input', () => { TILT = +tilt.value / 100; tv.textContent = tilt.value; ISO_BOX = {}; rerender(); });
+  document.getElementById('view-reset').addEventListener('click', () => {
+    ROT = 0; TILT = 0.5; rot.value = 0; tilt.value = 50;
+    rv.textContent = '0°'; tv.textContent = '50'; ISO_BOX = {};
+    VIEW = { k: 1, cx: 0.5, cy: 0.5 };
+    if (currentTheme === 'map') applyView(); else rerender();
+  });
+  setTheme('iso');
+}
+
+/* ================= Legend ================= */
+function isoCubeChip(color) {
+  const s = document.createElementNS(SVGNS, 'svg');
+  s.setAttribute('width', 20); s.setAttribute('height', 18);
+  s.setAttribute('viewBox', '0 0 20 18'); s.setAttribute('aria-hidden', 'true');
+  const mk = (points, f) => { const p = document.createElementNS(SVGNS, 'polygon');
+    p.setAttribute('points', points); p.setAttribute('fill', shade(color, f)); s.appendChild(p); };
+  mk('10,1 19,5.5 10,10 1,5.5', 1.18);
+  mk('1,5.5 10,10 10,17 1,12.5', 0.72);
+  mk('19,5.5 10,10 10,17 19,12.5', 0.46);
+  return s;
+}
+function lineChip(kind) {
+  const k = KIND[kind];
+  const s = document.createElementNS(SVGNS, 'svg');
+  s.setAttribute('width', 34); s.setAttribute('height', 12);
+  s.setAttribute('viewBox', '0 0 34 12'); s.setAttribute('aria-hidden', 'true');
+  const l = document.createElementNS(SVGNS, 'line');
+  l.setAttribute('x1', 1); l.setAttribute('y1', 6); l.setAttribute('x2', 27); l.setAttribute('y2', 6);
+  l.setAttribute('stroke', k.color); l.setAttribute('stroke-width', 2);
+  if (k.dash) l.setAttribute('stroke-dasharray', k.dash);
+  s.appendChild(l);
+  const a = document.createElementNS(SVGNS, 'path');
+  a.setAttribute('d', 'M27,2 L33,6 L27,10 Z'); a.setAttribute('fill', k.color);
+  s.appendChild(a);
+  return s;
+}
+function buildLegend() {
+  const cats = document.getElementById('legend-cats');
+  for (const key in CAT) {
+    const row = document.createElement('div'); row.className = 'legend-row';
+    row.appendChild(isoCubeChip(CAT[key].color));
+    const span = document.createElement('span'); span.textContent = CAT[key].name;
+    row.appendChild(span); cats.appendChild(row);
+  }
+  const note = document.createElement('p'); note.className = 'legend-note';
+  note.textContent = 'Building height / marker size ∝ approximate lines of code (hardware & external pads excluded).';
+  cats.appendChild(note);
+  const pathsBox = document.getElementById('legend-paths');
+  for (const key in KIND) {
+    const row = document.createElement('div'); row.className = 'legend-row';
+    row.appendChild(lineChip(key));
+    const span = document.createElement('span');
+    span.innerHTML = KIND[key].name + ' <span style="color:var(--faint)">— ' + KIND[key].label + '</span>';
+    row.appendChild(span); pathsBox.appendChild(row);
+  }
+}
+
+/* ================= Inspector ================= */
+function ghLink(f) {
+  const href = GH + f[0] + '#L' + f[1];
+  return '<a href="' + href + '" target="_blank" rel="noopener">' + f[0] + ':' + f[1] + '</a>' +
+         (f[2] ? ' <span style="color:var(--faint)">— ' + f[2] + '</span>' : '');
+}
+function select(id) {
+  selectedId = id;
+  document.querySelectorAll('.bldg-g.selected').forEach(g => g.classList.remove('selected'));
+  const g = document.querySelector('.bldg-g[data-id="' + id + '"]');
+  if (g) g.classList.add('selected');
+  const b = B.find(x => x.id === id);
+  const insp = document.getElementById('inspector');
+  const c = CAT[b.cat];
+  const inbound = P.filter(p => p.to === id && p.label).map(p => p.label);
+  const outbound = P.filter(p => p.from === id && p.label).map(p => p.label);
+  let conn = '';
+  if (outbound.length || inbound.length) {
+    conn = '<div class="conn">' +
+      (outbound.length ? '<div>→ out: ' + outbound.join(' · ') + '</div>' : '') +
+      (inbound.length ? '<div>← in: ' + inbound.join(' · ') + '</div>' : '') + '</div>';
+  }
+  insp.innerHTML =
+    '<h2>Inspector</h2>' +
+    '<span class="cat-chip" style="background:' + c.color + '">' + c.name + '</span>' +
+    '<h3>' + b.name + '</h3>' +
+    '<p>' + b.blurb + '</p>' +
+    (b.conn ? '<p style="color:var(--muted)">' + b.conn + '</p>' : '') +
+    '<ul class="files">' + b.files.map(f => '<li>' + ghLink(f) + '</li>').join('') + '</ul>' +
+    conn;
+}
+function defaultInspector() {
+  document.getElementById('inspector').innerHTML =
+    '<h2>Explainer</h2>' +
+    '<h3>Follow <code>gpuflo --json-stream</code></h3>' +
+    '<ol>' +
+    '<li><code>run_from_env</code> parses flags, resolves presentation config, and starts the monitor — src/run.rs:30.</li>' +
+    '<li>The monitor discovers AMD cards via sysfs and schedules independent kernel lanes: 250 ms fast, 1 s slow — src/monitor.rs:915.</li>' +
+    '<li>Samples are unit-normalized into <code>MetricBatch</code>es; the reducer applies kernel authority, freshness, and health, then assembles a <code>Snapshot</code> every 250 ms — src/state/reducer.rs:690.</li>' +
+    '<li>The stream loop writes one compact JSON line per tick, flushed, with a monotonic <code>sequence</code> — src/run.rs:199. A broken pipe is consumer shutdown, not an error.</li>' +
+    '<li>On the desktop, the Noctalia plugin reads that NDJSON into a taskbar chip and an overlay card per GPU — plugins/noctalia/gpuflo/service.luau:7.</li>' +
+    '</ol>' +
+    '<p style="color:var(--muted)">Click any building for its purpose, key files, and connections. The lower panels list every citation.</p>';
+}
+
+/* ================= Deep sections ================= */
+function buildDistricts() {
+  const grid = document.getElementById('district-grid');
+  const order = ['entry', 'mon', 'src', 'state', 'out', 'ext', 'hw', 'sup'];
+  for (const catKey of order) {
+    const card = document.createElement('div');
+    card.className = 'd-card';
+    card.style.borderTopColor = CAT[catKey].color;
+    let html = '<h3 style="color:' + CAT[catKey].color + '">' + CAT[catKey].name + '</h3>';
+    const members = B.filter(b => b.cat === catKey);
+    html += '<p class="d-sub">' + members.length + ' building' + (members.length > 1 ? 's' : '') + '</p>';
+    for (const b of members) {
+      html += '<div class="bldg"><h4>' + b.name + '</h4><p>' + b.blurb + '</p>' +
+              '<div class="cites">' + b.files.map(f => ghLink(f)).join('<br>') + '</div></div>';
+    }
+    card.innerHTML = html;
+    grid.appendChild(card);
+  }
+}
+function buildPathTable() {
+  const tbody = document.querySelector('#path-table tbody');
+  const kindLabel = { control: ['control', 'k-ctrl'], data: ['data', 'k-data'],
+                      dep: ['dep', 'k-dep'], build: ['build', 'k-build'] };
+  const nameOf = id => { const b = B.find(x => x.id === id); return b ? b.name.split(' (')[0] : id; };
+  for (const p of P) {
+    if (!p.label) continue;
+    const tr = document.createElement('tr');
+    const [kl, kc] = kindLabel[p.kind];
+    tr.innerHTML =
+      '<td class="kind ' + kc + '">' + kl + '</td>' +
+      '<td class="route">' + nameOf(p.from) + ' → ' + nameOf(p.to) + '</td>' +
+      '<td>' + p.what + '</td>' +
+      '<td class="cite">' + p.cite.map(f => ghLink(f)).join('<br>') + '</td>';
+    tbody.appendChild(tr);
+  }
+}
+
+buildLegend();
+defaultInspector();
+buildDistricts();
+buildPathTable();
+initThemes();
+initSceneView();
+initLegendUI();
+</script>
