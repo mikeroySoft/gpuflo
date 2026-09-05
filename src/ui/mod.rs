@@ -160,6 +160,7 @@ pub(super) struct UiState {
     show_processes: bool,
     show_detail: bool,
     show_help: bool,
+    show_logo: bool,
     notice: Option<(String, Instant)>,
     started: Instant,
     model_received: Instant,
@@ -184,6 +185,7 @@ impl UiState {
             show_processes: false,
             show_detail: false,
             show_help: false,
+            show_logo: true,
             notice: None,
             started: now,
             model_received: now,
@@ -290,7 +292,11 @@ impl UiState {
                 }
             }
             KeyCode::Left | KeyCode::Char('h') => self.select_step(-1),
-            KeyCode::Right | KeyCode::Char('l') => self.select_step(1),
+            KeyCode::Right => self.select_step(1),
+            KeyCode::Char('l') => {
+                self.show_logo = !self.show_logo;
+                Action::None
+            }
             KeyCode::Char('t') => {
                 self.theme = self.theme.next();
                 Action::None
