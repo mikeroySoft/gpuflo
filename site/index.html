@@ -5,90 +5,87 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GPUFlo — a light, fast terminal dashboard for AMD GPUs on Linux</title>
 <meta name="description" content="GPUFlo is a light, fast, accurate terminal dashboard for AMD GPUs on Linux — no ROCm, no root, no daemon. Extensible via NDJSON and an embeddable Rust library.">
+<link rel="stylesheet" href="mikeroysoft.css">
 <style>
-  :root{
-    --bg:#0d0c0a; --bg2:#151310; --panel:#1a1712; --line:#3a2f1e;
-    --cream:#f0e2c8; --amber:#f5a623; --orange:#e07b39; --rust:#c05a2a;
-    --dim:#8a7a5e; --dimmer:#5a4f3c;
-  }
   *{box-sizing:border-box;margin:0;padding:0}
   html{scroll-behavior:smooth}
-  body{background:var(--bg);color:var(--cream);font-family:"JetBrains Mono","Fira Code",ui-monospace,monospace;line-height:1.6}
-  a{color:var(--amber);text-decoration:none}
+  body{background:var(--surface-page);color:var(--text-primary);font-family:var(--font-mono);font-size:16px;line-height:1.6}
+  a{color:var(--link);text-decoration:none}
   a:hover{text-decoration:underline}
   .wrap{max-width:980px;margin:0 auto;padding:0 24px}
 
-  nav{display:flex;justify-content:space-between;align-items:center;padding:20px 0;border-bottom:1px solid var(--line)}
+  nav{display:flex;justify-content:space-between;align-items:center;padding:20px 0;border-bottom:1px solid var(--border-hairline)}
   nav .brand{font-weight:700;letter-spacing:.08em}
-  nav .brand span{color:var(--amber)}
-  nav .links a{margin-left:22px;color:var(--dim);font-size:14px}
-  nav .links a:hover{color:var(--amber);text-decoration:none}
+  nav .brand span{color:var(--accent)}
+  nav .brand .brand-name{color:inherit;white-space:nowrap}
+  nav .links a{margin-left:22px;color:var(--text-muted);font-size:14px}
+  nav .links a:hover{color:var(--accent);text-decoration:none}
 
   header{padding:72px 0 40px;text-align:center}
   .logo{
     font-size:clamp(52px,9vw,96px);font-weight:800;letter-spacing:.04em;line-height:1;
-    background:linear-gradient(180deg,#f6ead0 0%,#f0cf8e 30%,var(--amber) 55%,var(--orange) 80%,var(--rust) 100%);
+    background:var(--gradient-wordmark);
     -webkit-background-clip:text;background-clip:text;color:transparent;
-    filter:drop-shadow(0 0 24px rgba(245,166,35,.25));
+    filter:var(--glow-wordmark);
   }
-  .tag{margin-top:14px;color:var(--dim);font-size:16px}
-  .tag em{color:var(--cream);font-style:normal}
+  .tag{margin-top:14px;color:var(--text-muted);font-size:16px}
+  .tag em{color:var(--text-primary);font-style:normal}
 
   .install{margin:40px auto 0;max-width:640px;text-align:left}
-  .install .label{font-size:12px;color:var(--dimmer);text-transform:uppercase;letter-spacing:.2em;margin-bottom:8px}
+  .install .label{font-size:12px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.2em;margin-bottom:8px}
   .cmd{display:flex;align-items:center;justify-content:space-between;gap:12px;
-    background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px 18px;margin-bottom:10px}
-  .cmd code{color:var(--cream);font-size:15px}
-  .cmd code .p{color:var(--rust)}
-  .cmd button{background:none;border:1px solid var(--line);border-radius:6px;color:var(--dim);
+    background:var(--surface-panel);border:1px solid var(--border-hairline);border-radius:8px;padding:14px 18px;margin-bottom:10px}
+  .cmd code{color:var(--text-primary);font-size:15px}
+  .cmd code .p{color:var(--accent-deep)}
+  .cmd button{background:none;border:1px solid var(--border-hairline);border-radius:6px;color:var(--text-muted);
     font:inherit;font-size:12px;padding:4px 10px;cursor:pointer}
-  .cmd button:hover{color:var(--amber);border-color:var(--amber)}
-  .install .note{font-size:13px;color:var(--dimmer)}
-  .install .note a{color:var(--dim)}
+  .cmd button:hover{color:var(--accent);border-color:var(--border-accent)}
+  .install .note{font-size:13px;color:var(--text-faint)}
+  .install .note a{color:var(--text-muted)}
 
-  .term{margin:64px auto 0;max-width:860px;background:#0a0908;border:1px solid var(--line);
-    border-radius:12px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.6),0 0 60px rgba(245,166,35,.06)}
-  .term .bar{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg2);border-bottom:1px solid var(--line)}
-  .term .bar::before{content:"$";color:var(--rust);font-weight:700}
-  .term .bar span{margin-left:10px;color:var(--dimmer);font-size:12px}
+  .term{margin:64px auto 0;max-width:860px;background:var(--surface-terminal);border:1px solid var(--border-hairline);
+    border-radius:12px;overflow:hidden;box-shadow:var(--shadow-terminal),var(--glow-amber)}
+  .term .bar{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--surface-sunken);border-bottom:1px solid var(--border-hairline)}
+  .term .bar::before{content:"$";color:var(--accent-deep);font-weight:700}
+  .term .bar span{margin-left:10px;color:var(--text-faint);font-size:12px}
   .term .body{padding:22px 26px;font-size:14px}
-  .gpu-strip{display:inline-block;background:var(--amber);color:#0d0c0a;font-weight:700;padding:2px 12px;margin-bottom:16px}
-  .sect{color:var(--cream);margin:10px 0 4px}
-  .sect .val{color:var(--amber)} .sect .peak{float:right;color:var(--dim)}
-  canvas{display:block;width:100%;height:110px;border:1px solid var(--line);border-radius:4px;margin-bottom:14px;background:#0d0c0a}
-  .stats{margin-top:6px;color:var(--cream);text-align:center}
-  .stats b{color:var(--amber);font-weight:400}
-  .keys{margin-top:12px;color:var(--dimmer);font-size:12px;text-align:center}
+  .gpu-strip{display:inline-block;background:var(--accent);color:var(--text-on-accent);font-weight:700;padding:2px 12px;margin-bottom:16px}
+  .sect{color:var(--text-primary);margin:10px 0 4px}
+  .sect .val{color:var(--accent)} .sect .peak{float:right;color:var(--text-muted)}
+  canvas{display:block;width:100%;height:110px;border:1px solid var(--border-hairline);border-radius:4px;margin-bottom:14px;background:var(--surface-page)}
+  .stats{margin-top:6px;color:var(--text-primary);text-align:center}
+  .stats b{color:var(--accent);font-weight:400}
+  .keys{margin-top:12px;color:var(--text-faint);font-size:12px;text-align:center}
 
   section{padding:80px 0 0}
-  h2{font-size:14px;color:var(--amber);text-transform:uppercase;letter-spacing:.25em;margin-bottom:28px}
-  h2::before{content:"// ";color:var(--dimmer)}
-  .lead{font-size:20px;max-width:760px;color:var(--cream)}
-  .lead b{color:var(--amber);font-weight:600}
+  h2{font-size:14px;color:var(--accent);text-transform:uppercase;letter-spacing:.25em;margin-bottom:28px}
+  h2::before{content:"// ";color:var(--text-faint)}
+  .lead{font-size:20px;max-width:760px;color:var(--text-primary)}
+  .lead b{color:var(--accent);font-weight:600}
 
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px;margin-top:32px}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:22px}
-  .card h3{font-size:15px;color:var(--amber);margin-bottom:8px;font-weight:600}
-  .card p{font-size:13.5px;color:var(--dim)}
-  .card p code{color:var(--cream);background:var(--bg2);padding:1px 5px;border-radius:3px;font-size:12.5px}
+  .card{background:var(--surface-panel);border:1px solid var(--border-hairline);border-radius:8px;padding:22px}
+  .card h3{font-size:15px;color:var(--accent);margin-bottom:8px;font-weight:600}
+  .card p{font-size:13.5px;color:var(--text-muted)}
+  .card p code{color:var(--text-primary);background:var(--surface-sunken);padding:1px 5px;border-radius:3px;font-size:12.5px}
 
   .qa{margin-top:32px;counter-reset:q}
-  .qa div{display:flex;gap:20px;padding:20px 0;border-top:1px solid var(--line);font-size:17px}
-  .qa div::before{counter-increment:q;content:counter(q);color:var(--rust);font-size:32px;font-weight:800;line-height:1}
+  .qa div{display:flex;gap:20px;padding:20px 0;border-top:1px solid var(--border-hairline);font-size:17px}
+  .qa div::before{counter-increment:q;content:counter(q);color:var(--accent-deep);font-size:32px;font-weight:800;line-height:1}
 
   .cols{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:32px}
   @media(max-width:820px){.cols{grid-template-columns:1fr}}
-  pre{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:20px;overflow-x:auto;font-size:12.5px;line-height:1.55}
-  pre .c{color:var(--dimmer)} pre .k{color:var(--orange)} pre .s{color:#c9b458} pre .f{color:var(--amber)}
-  .cols h3{font-size:14px;color:var(--cream);margin-bottom:10px}
+  pre{background:var(--surface-panel);border:1px solid var(--border-hairline);border-radius:8px;padding:20px;overflow-x:auto;font-size:12.5px;line-height:1.55}
+  pre .c{color:var(--text-faint)} pre .k{color:var(--accent-deep)} pre .s{color:var(--accent-soft)} pre .f{color:var(--accent)}
+  .cols h3{font-size:14px;color:var(--text-primary);margin-bottom:10px}
 
-  footer{margin-top:100px;padding:40px 0 60px;border-top:1px solid var(--line);color:var(--dimmer);font-size:13px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
+  footer{margin-top:100px;padding:40px 0 60px;border-top:1px solid var(--border-hairline);color:var(--text-faint);font-size:13px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
 </style>
 </head>
-<body>
+<body data-product="gpuflo">
 <div class="wrap">
   <nav>
-    <div class="brand">mikeroy<span>Soft</span> :: gpuflo</div>
+    <div class="brand"><span class="brand-name"><span class="mrs-mark mrs-mark-circle" aria-hidden="true"></span> mikeroy<span>Soft</span></span> :: gpuflo</div>
     <div class="links">
       <a href="#what">What it does</a><a href="#extend">Extend</a>
       <a href="atlas.html">Atlas</a><a href="factory.html">AI Factory</a>
@@ -206,8 +203,13 @@ function dots(cv,color){const x=cv.getContext('2d');return(hist,fillTo)=>{
   }};}
 const actHist=Array(N).fill(5), memHist=Array(N).fill(78);
 let phase=0,t=0,peak=37,mem=78;
-const dAct=dots(document.getElementById('cv-act'),(v)=>v>70?'#f5a623':v>30?'#e07b39':'#a8642f');
-const dMem=dots(document.getElementById('cv-mem'),()=>'#c05a2a');
+const graphStyle=getComputedStyle(document.body);
+const graphHigh=graphStyle.getPropertyValue('--graph-high').trim(),
+      graphMid=graphStyle.getPropertyValue('--graph-mid').trim(),
+      graphLow=graphStyle.getPropertyValue('--graph-low').trim(),
+      graphMemory=graphStyle.getPropertyValue('--graph-memory').trim();
+const dAct=dots(document.getElementById('cv-act'),(v)=>v>70?graphHigh:v>30?graphMid:graphLow);
+const dMem=dots(document.getElementById('cv-mem'),()=>graphMemory);
 function step(){
   t++;
   if(t%40===0)phase=(phase+1)%3;
