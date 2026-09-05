@@ -85,7 +85,11 @@ pub(super) fn draw(frame: &mut Frame<'_>, state: &UiState) {
                 surface,
             };
             let reserved = match surface {
-                Surface::Mode => layout::centered(area, area.width.min(82), 32),
+                Surface::Mode => layout::centered(
+                    area,
+                    area.width.min(82),
+                    if state.show_logo { 32 } else { 26 },
+                ),
                 Surface::Compact => layout::centered(area, area.width.min(74), 15),
                 Surface::Mini => layout::centered(area, area.width.min(74), 9),
                 Surface::Tiny => area,
@@ -127,7 +131,7 @@ fn render_mode(frame: &mut Frame<'_>, view: &View<'_>, area: Rect) {
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(6),
+            Constraint::Length(if view.state.show_logo { 6 } else { 0 }),
             Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Length(1),
@@ -143,7 +147,9 @@ fn render_mode(frame: &mut Frame<'_>, view: &View<'_>, area: Rect) {
         ])
         .split(area);
 
-    render_logo(frame, view, rows[0]);
+    if view.state.show_logo {
+        render_logo(frame, view, rows[0]);
+    }
     frame.render_widget(
         Paragraph::new(view.state.tagline)
             .alignment(Alignment::Center)
@@ -1028,7 +1034,8 @@ fn render_help(
 ) {
     let palette = styler.palette;
     let keys = [
-        ("←/→ · h/l", "select GPU"),
+        ("←/→ · h", "select GPU (h: previous)"),
+        ("l", "toggle logo (session only)"),
         ("t", "cycle theme (session only)"),
         ("m", "cycle surface preference (session only)"),
         ("p", "toggle process overlay"),

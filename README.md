@@ -157,7 +157,8 @@ gpuflo --mode tiny
 
 | Key | Action |
 | --- | --- |
-| `←` / `→` or `h` / `l` | Select the previous or next physical GPU |
+| `←` / `→` | Select the previous or next physical GPU (`h` also selects previous) |
+| `l` | Toggle the logo and recenter the layout for this session |
 | `t` | Cycle Buffalo, Nord, and monochrome themes for this session |
 | `m` | Cycle the preferred responsive view for this session |
 | `p` | Toggle the process-attribution overlay |

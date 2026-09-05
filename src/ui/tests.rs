@@ -217,6 +217,27 @@ fn mode_frame_shows_logo_tagline_health_and_selection() {
 }
 
 #[test]
+fn logo_key_hides_recenters_and_restores_without_selecting_another_gpu() {
+    let mut state = state_with_model(false);
+    let before = buffer_text(&render(&state, 120, 40));
+    assert_eq!(state.handle_key(KeyCode::Char('l')), Action::None);
+    let hidden = buffer_text(&render(&state, 120, 40));
+    assert!(!hidden.contains("██████╗"));
+    assert!(hidden.contains("peak: 97%"), "selected GPU must not change");
+    assert!(hidden.contains("Memory occupancy"));
+    assert_eq!(
+        hidden.lines().position(|row| row.contains(state.tagline)),
+        Some(7)
+    );
+    assert_eq!(
+        before.lines().position(|row| row.contains(state.tagline)),
+        Some(10)
+    );
+    assert_eq!(state.handle_key(KeyCode::Char('l')), Action::None);
+    assert_eq!(buffer_text(&render(&state, 120, 40)), before);
+}
+
+#[test]
 fn launch_tagline_remains_stable_across_frames() {
     let mut state = state_with_model(true);
     let launch_tagline = state.tagline;
