@@ -319,6 +319,39 @@ JSON and NDJSON use the same nested physical-GPU/XCP model as the TUI. The envel
 - optional run-local `sequence` for streamed records;
 - every physical GPU and its nested partitions.
 
+Every physical GPU carries `gpus[].platform` in both `--json` and every
+`--json-stream` snapshot, for example:
+
+```json
+"platform": {"id": "strix_halo", "memory_pool": "gtt"}
+```
+
+This is discovery classification of the physical GPU, not an XCP partition
+property or a stream-envelope field. Both writers serialize the same classification.
+
+| `platform.id` | `platform.memory_pool` | Discovery evidence |
+| --- | --- | --- |
+| `strix_halo` | `gtt` | Recognized AMD PCI device `1002:1586`; takes precedence over conflicting heap evidence |
+| `generic_apu` | `gtt` | Unrecognized device with KFD unified-memory heap evidence |
+| `generic_discrete` | `vram` | Unrecognized device with KFD dedicated-memory heap evidence |
+| `unknown` | `unknown` | Neither device recognition nor conclusive heap evidence |
+
+`memory_pool` identifies the applicable accounting pool: `gtt` is GTT-backed
+unified memory, `vram` is dedicated video memory, and `unknown` means the evidence
+does not establish the pool. A large GTT allocation or aperture on a discrete GPU
+does not change its classification. Measured usage, totals, and unavailable
+states remain in `gpus[].partitions[].memory`; identity alone does not establish
+capacity, workload suitability, or NPU capability.
+
+The field is additive within schema version 1. Consumers should tolerate new
+fields and new string values. Deserializing a legacy snapshot without `platform`
+into GPUFlo's public model defaults it to
+`{"id":"unknown","memory_pool":"unknown"}`; serialization includes that default.
+Unrecognized future platform-ID and memory-pool strings survive deserialization
+and serialization unchanged, rather than being replaced with `unknown`.
+The explicit `unknown` classification means inconclusive evidence, not an error
+or an assertion that the device has no usable memory.
+
 A current observation has a value and source time:
 
 ```json

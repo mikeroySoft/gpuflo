@@ -317,3 +317,134 @@ fn sequence_is_omitted_when_none_and_present_when_some() {
     let restored: Snapshot = serde_json::from_value(streamed).unwrap();
     assert_eq!(restored.sequence, Some(42));
 }
+
+#[test]
+fn legacy_platform_defaults_and_future_strings_round_trip() {
+    let mut legacy = to_json(None);
+    for gpu in legacy["gpus"].as_array_mut().unwrap() {
+        gpu.as_object_mut().unwrap().remove("platform");
+    }
+    let parsed: Snapshot = serde_json::from_value(legacy.clone()).unwrap();
+    let mut restored = serde_json::to_value(parsed).unwrap();
+    for gpu in restored["gpus"].as_array_mut().unwrap() {
+        assert_eq!(
+            gpu.as_object_mut().unwrap().remove("platform").unwrap(),
+            serde_json::json!({"id": "unknown", "memory_pool": "unknown"})
+        );
+    }
+    assert_eq!(
+        restored, legacy,
+        "legacy accounting and identity are unchanged"
+    );
+
+    let mut future = to_json(Some(42));
+    future["gpus"][0]["platform"] =
+        serde_json::json!({"id": "future_architecture", "memory_pool": "future_pool"});
+    let parsed: Snapshot = serde_json::from_value(future.clone()).unwrap();
+    assert_eq!(serde_json::to_value(parsed).unwrap(), future);
+}
+
+#[test]
+#[cfg(debug_assertions)]
+fn discovered_platforms_agree_in_json_and_ndjson() {
+    use std::io::{BufRead, BufReader};
+    use std::process::{Command, Stdio};
+    use std::time::Duration;
+
+    for (fixture, id, pool, partitions) in [
+        ("apu-strix-halo", "strix_halo", "gtt", 1),
+        ("apu-gtt", "generic_apu", "gtt", 1),
+        ("discrete-large-gtt", "generic_discrete", "vram", 1),
+        ("platform-unknown", "unknown", "unknown", 1),
+        ("multi-xcp", "generic_discrete", "vram", 2),
+    ] {
+        let command = || {
+            let mut command = Command::new(env!("CARGO_BIN_EXE_gpuflo"));
+            command
+                .env(
+                    "GPUFLO_HOST_ROOT",
+                    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                        .join("tests/fixtures/kernel")
+                        .join(fixture),
+                )
+                .env_remove("GPUFLO_FATAL_AFTER_MS")
+                .env_remove("HOME")
+                .env_remove("XDG_CONFIG_HOME")
+                .env_remove("XDG_STATE_HOME")
+                .stdin(Stdio::null());
+            command
+        };
+        let output = command().arg("--json").output().unwrap();
+        assert!(output.status.success(), "{fixture}: {:?}", output);
+        let json: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert!(json.get("sequence").is_none());
+
+        let mut child = command()
+            .arg("--json-stream")
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let stdout = child.stdout.take().unwrap();
+        let (send, receive) = std::sync::mpsc::channel();
+        let reader = std::thread::spawn(move || {
+            for line in BufReader::new(stdout).lines().take(2) {
+                if send.send(line).is_err() {
+                    break;
+                }
+            }
+        });
+        let first = receive.recv_timeout(Duration::from_secs(10));
+        let second = receive.recv_timeout(Duration::from_secs(10));
+        let _ = child.kill();
+        child.wait().unwrap();
+        reader.join().unwrap();
+        let records: Vec<Value> = [first, second]
+            .into_iter()
+            .map(|line| serde_json::from_str(&line.unwrap().unwrap()).unwrap())
+            .collect();
+        assert_eq!(records[0]["sequence"], 1, "{fixture}");
+        assert!(
+            records[1]["sequence"].as_u64().unwrap() > 1,
+            "stream sequences advance; skipped snapshots may leave gaps"
+        );
+
+        for snapshot in std::iter::once(&json).chain(&records) {
+            assert_eq!(snapshot["schema_version"], 1);
+            assert!(snapshot.get("platform").is_none());
+            let gpus = snapshot["gpus"].as_array().unwrap();
+            assert_eq!(gpus.len(), 1, "{fixture}");
+            let gpu = &gpus[0];
+            assert_eq!(
+                gpu["platform"],
+                serde_json::json!({"id": id, "memory_pool": pool}),
+                "{fixture}"
+            );
+            assert_eq!(gpu["id"], json["gpus"][0]["id"]);
+            assert_eq!(gpu["bdf"], json["gpus"][0]["bdf"]);
+            let parts = gpu["partitions"].as_array().unwrap();
+            assert_eq!(parts.len(), partitions, "{fixture}");
+            for (index, partition) in parts.iter().enumerate() {
+                assert!(partition.get("platform").is_none());
+                assert_eq!(partition["id"], json["gpus"][0]["partitions"][index]["id"]);
+                assert_eq!(partition["memory"]["pool"], pool);
+            }
+            if fixture == "apu-strix-halo" {
+                assert_eq!(
+                    parts[0]["memory"]["total_bytes"]["value"],
+                    133_143_986_176u64
+                );
+                assert_eq!(parts[0]["memory"]["used_bytes"]["value"], 19_224_829_952u64);
+                assert_eq!(
+                    gpu["temperature"]["hotspot_celsius"]["state"],
+                    "unsupported_hardware"
+                );
+            }
+            if fixture == "discrete-large-gtt" {
+                assert_eq!(
+                    parts[0]["memory"]["total_bytes"]["value"],
+                    34_208_743_424u64
+                );
+            }
+        }
+    }
+}

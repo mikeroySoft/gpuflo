@@ -1,0 +1,4 @@
+Reuses boundary-unknown's synthesized DRM device via a relative symlink.
+KFD topology is deliberately absent: the unrecognized PCI device has no
+conclusive heap evidence, so platform identity and pool must stay unknown.
+The unknown gpu_metrics format remains source-backed driver-version evidence.
