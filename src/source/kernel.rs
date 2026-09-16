@@ -1171,6 +1171,7 @@ mod tests {
         let (mut source, devices) = source("apu-gtt");
         assert_eq!(devices[0].disc.pool, MemoryPool::GTT);
         assert_eq!(devices[0].disc.platform.id, PlatformId::GENERIC_APU);
+        assert_eq!(devices[0].disc.platform.memory_pool, MemoryPool::GTT);
         assert_eq!(devices[0].disc.id.as_str(), "gpu-0000:c4:00.0");
         assert_eq!(devices[0].disc.name, "AMD GPU 0x15bf");
         let sample = source.collect_fast(&devices[0]);
@@ -1191,6 +1192,7 @@ mod tests {
         let disc = &devices[0].disc;
         assert_eq!(disc.pool, MemoryPool::GTT);
         assert_eq!(disc.platform.id, PlatformId::STRIX_HALO);
+        assert_eq!(disc.platform.memory_pool, MemoryPool::GTT);
         assert_eq!(disc.name, "AMD GPU 0x1586");
         let sample = source.collect_fast(&devices[0]);
         let part = &sample.partitions[0];
@@ -1214,6 +1216,7 @@ mod tests {
         let (mut source, devices) = source("discrete-large-gtt");
         assert_eq!(devices[0].disc.pool, MemoryPool::VRAM);
         assert_eq!(devices[0].disc.platform.id, PlatformId::GENERIC_DISCRETE);
+        assert_eq!(devices[0].disc.platform.memory_pool, MemoryPool::VRAM);
         let sample = source.collect_fast(&devices[0]);
         assert_eq!(
             sample.partitions[0].mem_total_bytes,
@@ -1261,6 +1264,15 @@ mod tests {
         // The secondary partition owns its memory but no engine sensors.
         assert_eq!(secondary.activity_centipercent, Reading::Absent);
         assert_eq!(secondary.mem_used_bytes, Reading::Value(51_539_607_552));
+    }
+
+    #[test]
+    fn missing_heap_evidence_preserves_unknown_platform() {
+        let (_, devices) = source("platform-unknown");
+        assert_eq!(devices.len(), 1);
+        assert_eq!(devices[0].disc.platform.id, PlatformId::UNKNOWN);
+        assert_eq!(devices[0].disc.platform.memory_pool.as_str(), "unknown");
+        assert_eq!(devices[0].disc.pool.as_str(), "unknown");
     }
 
     #[test]
