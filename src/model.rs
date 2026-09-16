@@ -156,6 +156,61 @@ string_backed! {
     }
 }
 
+string_backed! {
+    /// A recognized AMD GPU platform/architecture family, resolved once at
+    /// discovery. Devices absent from the recognition table still classify
+    /// as [`PlatformId::GENERIC_APU`], [`PlatformId::GENERIC_DISCRETE`], or
+    /// [`PlatformId::UNKNOWN`] from KFD heap-type evidence, so an
+    /// unrecognized future device is never left unclassified.
+    PlatformId {
+        /// AMD Ryzen AI Max "Strix Halo" (PCI device `1002:1586`), whose KFD
+        /// heap type misleadingly matches discrete GPUs despite exposing
+        /// unified memory through GTT.
+        STRIX_HALO => "strix_halo",
+        /// An APU not individually recognized, classified by KFD heap-type
+        /// evidence as unified memory.
+        GENERIC_APU => "generic_apu",
+        /// A discrete GPU not individually recognized, classified by KFD
+        /// heap-type evidence as dedicated VRAM.
+        GENERIC_DISCRETE => "generic_discrete",
+        /// Neither the recognition table nor heap-type evidence classified
+        /// this device.
+        UNKNOWN => "unknown",
+    }
+}
+
+/// One physical GPU's classified architecture family, resolved once at
+/// discovery from its PCI device ID and KFD-reported heap-type evidence.
+/// Carries the memory-pool consequence of that classification so sources
+/// have one place to resolve device-specific quirks instead of inline
+/// device-ID comparisons.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Platform {
+    /// The recognized family, or a generic/unknown fallback.
+    pub id: PlatformId,
+    /// The memory pool this platform's evidence resolves to.
+    pub memory_pool: MemoryPool,
+}
+
+impl Platform {
+    /// Whether this platform has a monitorable NPU. Always `false` today —
+    /// no platform entry wires up NPU capability yet; a future branch adding
+    /// NPU monitoring extends this rather than re-deriving platform
+    /// identity from scratch.
+    pub fn has_npu(&self) -> bool {
+        false
+    }
+}
+
+impl Default for Platform {
+    fn default() -> Self {
+        Self {
+            id: PlatformId::UNKNOWN,
+            memory_pool: MemoryPool::new("unknown"),
+        }
+    }
+}
+
 /// A metric at one hardware scope: a value with its source time or a state.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -395,6 +450,9 @@ pub struct PhysicalGpu {
     /// Optional source-reported serial identity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub serial: Option<String>,
+    /// Classified architecture family, resolved once at discovery.
+    #[serde(default)]
+    pub platform: Platform,
     /// Highest-priority active source-backed condition.
     pub health: Health,
     /// Socket-scoped temperature.
@@ -527,6 +585,7 @@ mod tests {
             name: "AMD Instinct MI300X".to_owned(),
             uuid: None,
             serial: None,
+            platform: Platform::default(),
             health: Health {
                 category: HealthCategory::NONE,
                 message: "no active limits or faults".to_owned(),

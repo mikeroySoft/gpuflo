@@ -13,6 +13,7 @@ mod monitor;
 mod normalize;
 mod output;
 mod persist;
+mod platform;
 mod run;
 mod source;
 mod state;
@@ -21,8 +22,8 @@ mod ui;
 
 pub use model::{
     Health, HealthCategory, InvalidPciBdf, Memory, MemoryPool, Observation, ObservationState,
-    Partition, PartitionId, PciBdf, PhysicalGpu, PhysicalGpuId, Power, SCHEMA_VERSION, Snapshot,
-    Temperature, Timestamp,
+    Partition, PartitionId, PciBdf, PhysicalGpu, PhysicalGpuId, Platform, PlatformId, Power,
+    SCHEMA_VERSION, Snapshot, Temperature, Timestamp,
 };
 pub use monitor::{
     Monitor, MonitorClosed, MonitorCommand, MonitorError, MonitorEvent, MonitorOptions, Notice,

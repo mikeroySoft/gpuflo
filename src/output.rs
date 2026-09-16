@@ -248,7 +248,7 @@ mod tests {
 
     use super::*;
     use crate::model::{
-        Health, HealthCategory, MemoryPool, Partition, PartitionId, PciBdf, PhysicalGpuId,
+        Health, HealthCategory, MemoryPool, Partition, PartitionId, PciBdf, PhysicalGpuId, Platform,
     };
 
     fn ts(odt: time::OffsetDateTime) -> Timestamp {
@@ -292,6 +292,7 @@ mod tests {
             name: "AMD Instinct MI300X".to_owned(),
             uuid: None,
             serial: None,
+            platform: Platform::default(),
             health: Health {
                 category: HealthCategory::NONE,
                 message: "no active limits or faults".to_owned(),
