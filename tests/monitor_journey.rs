@@ -242,3 +242,35 @@ fn shutdown_surfaces_persistence_failure() {
     assert!(error.to_string().contains("persistence"));
     let _ = std::fs::remove_file(blocked_parent);
 }
+
+#[test]
+fn boundary_throttle_reaches_daily_summary() {
+    let root = mutable_root("boundary-throttle", "throttle");
+    let summary = root.join("daily-summary.json");
+    let mut options = MonitorOptions::new();
+    options.summary_path = Some(summary.clone());
+    let monitor = start_with_options(&root, options);
+    let deadline = Instant::now() + Duration::from_secs(4);
+    loop {
+        let _ = next_snapshot(&monitor);
+        if Instant::now() >= deadline {
+            break;
+        }
+        if summary.exists() {
+            let record: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(&summary).unwrap()).unwrap();
+            if record["gpus"].as_object().is_some_and(|gpus| {
+                gpus.values().any(|gpu| {
+                    gpu["throttle_episodes"]
+                        .as_array()
+                        .is_some_and(|episodes| !episodes.is_empty())
+                })
+            }) {
+                monitor.shutdown().unwrap();
+                return;
+            }
+        }
+    }
+    monitor.shutdown().unwrap();
+    panic!("boundary throttle episode did not reach daily summary");
+}

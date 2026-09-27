@@ -16,7 +16,7 @@ use crossbeam_channel::{Receiver, Sender, bounded};
 use crate::state::history::DailySummaryRecord;
 
 /// Daily summaries are tiny; refuse planted or corrupted oversized files.
-const MAX_RECORD_BYTES: u64 = 64 * 1024;
+pub(crate) const MAX_RECORD_BYTES: u64 = 64 * 1024;
 /// Process-local uniqueness for `create_new` temporary files.
 static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
@@ -61,13 +61,31 @@ pub(crate) fn load(path: &Path) -> Result<Option<DailySummaryRecord>, String> {
         .map_err(|error| format!("invalid daily summary {}: {error}", path.display()))
 }
 
+/// The exact bytes [`store`] writes for `record`. The reducer measures its
+/// canonical record against [`MAX_RECORD_BYTES`] through this encoding.
+pub(crate) fn encode(record: &DailySummaryRecord) -> serde_json::Result<Vec<u8>> {
+    let mut body = serde_json::to_vec_pretty(record)?;
+    body.push(b'\n');
+    Ok(body)
+}
+
 /// Writes the record atomically: an exclusive, same-directory temporary
 /// regular file, flush, fsync, then rename. `create_new` refuses a planted
 /// symlink; a failure leaves any previous complete file intact.
+///
+/// The record is serialized as-is. A record that does not fit the budget
+/// [`load`] accepts is refused rather than written or trimmed here: bounding
+/// the record is the accumulator's job, so the file always matches the
+/// canonical summary.
 pub(crate) fn store(path: &Path, record: &DailySummaryRecord) -> std::io::Result<()> {
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
     std::fs::create_dir_all(parent)?;
-    let body = serde_json::to_vec_pretty(record)?;
+    let body = encode(record)?;
+    if body.len() as u64 > MAX_RECORD_BYTES {
+        return Err(std::io::Error::other(format!(
+            "daily summary exceeds {MAX_RECORD_BYTES} bytes"
+        )));
+    }
     let (tmp, mut file) = loop {
         let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         let mut name = path.as_os_str().to_owned();
@@ -85,7 +103,6 @@ pub(crate) fn store(path: &Path, record: &DailySummaryRecord) -> std::io::Result
     };
     let result = (|| {
         file.write_all(&body)?;
-        file.write_all(b"\n")?;
         file.sync_all()?;
         std::fs::rename(&tmp, path)?;
         std::fs::File::open(parent)?.sync_all()
@@ -193,8 +210,11 @@ mod tests {
     use std::collections::BTreeMap;
     use std::os::unix::fs::DirBuilderExt;
 
+    use time::UtcOffset;
+    use time::macros::date;
+
     use super::*;
-    use crate::state::history::GpuDailyRecord;
+    use crate::state::history::{DailyAccumulator, GpuDailyRecord, ThrottleEpisode};
 
     static TEST_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
@@ -206,6 +226,7 @@ mod tests {
                 activity_peak_percent: Some(peak),
                 memory_peak_percent: Some(50.0),
                 energy_joules: None,
+                throttle_episodes: Vec::new(),
             },
         );
         DailySummaryRecord {
@@ -256,6 +277,69 @@ mod tests {
             .collect();
         assert_eq!(entries, vec![std::ffi::OsString::from("daily.json")]);
         let _ = std::fs::remove_dir_all(path.parent().unwrap().parent().unwrap());
+    }
+
+    #[test]
+    fn multi_gpu_accumulator_record_round_trips_unchanged() {
+        let path = temp_path("budget/daily.json");
+        let mut daily = DailyAccumulator::new(date!(2026 - 08 - 21));
+        let start = date!(2026 - 08 - 21).midnight().assume_utc();
+        let gpus: Vec<String> = (0..8)
+            .map(|n| format!("pci-0000:{n:02}:00.0-amdgpu-primary-{n}"))
+            .collect();
+        for gpu in &gpus {
+            for n in 0..64 {
+                let at = start + time::Duration::seconds(n * 60);
+                daily.observe_health(
+                    gpu,
+                    at,
+                    UtcOffset::UTC,
+                    Some("thermal, power, current, other accumulated"),
+                );
+                if n < 63 {
+                    daily.observe_health(
+                        gpu,
+                        at + time::Duration::seconds(30),
+                        UtcOffset::UTC,
+                        None,
+                    );
+                }
+            }
+        }
+        // The accumulator already bounds the record; store writes it as-is and
+        // load accepts it, so a restart seeds exactly what was running.
+        let canonical = daily.record();
+        store(&path, &canonical).unwrap();
+        assert!(std::fs::metadata(&path).unwrap().len() <= MAX_RECORD_BYTES);
+        let loaded = load(&path).unwrap().unwrap();
+        assert_eq!(loaded, canonical);
+        let mut restored = DailyAccumulator::new(date!(2026 - 08 - 21));
+        restored.seed(&loaded);
+        assert_eq!(restored.record(), canonical);
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn store_refuses_a_record_beyond_the_load_budget() {
+        let path = temp_path("oversized-store/daily.json");
+        let first = record("2026-08-21", 80.0);
+        store(&path, &first).unwrap();
+        let mut oversized = record("2026-08-21", 90.0);
+        oversized.gpus.insert(
+            "gpu-b".to_owned(),
+            GpuDailyRecord {
+                throttle_episodes: vec![ThrottleEpisode {
+                    started_at: "2026-08-21T00:00:00Z".to_owned(),
+                    ended_at: None,
+                    duration_seconds: None,
+                    reasons: "x".repeat(MAX_RECORD_BYTES as usize),
+                }],
+                ..Default::default()
+            },
+        );
+        assert!(store(&path, &oversized).is_err());
+        assert_eq!(load(&path).unwrap(), Some(first));
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 
     #[test]

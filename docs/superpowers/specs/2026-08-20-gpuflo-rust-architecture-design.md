@@ -140,7 +140,7 @@ Loads and atomically writes the small daily summary set. It never persists raw o
 
 `persist` receives an optional state path already resolved by `config`; it does not inspect XDG environment variables. `None` disables persistence for library embedders.
 
-Writes use a temporary file plus atomic rename. A coalescing writer retains only the latest pending summary.
+Writes use a temporary file plus atomic rename. A coalescing writer retains only the latest pending summary. The record is stored exactly as the reducer produced it; bounding its size belongs to daily accumulation, not to this module.
 
 ### `config`
 
@@ -399,6 +399,8 @@ Missing/blank config means built-in defaults. The separate configuration decisio
 ## Persistence
 
 The reducer owns daily-summary meaning and local-date rollover. Persistence only stores/loads the canonical summary record at the path supplied through `MonitorOptions`.
+
+That ownership includes retention. The daily accumulator bounds what the day keeps — throttle episodes are capped per GPU, and closed episodes are dropped globally-oldest-first until the record fits the byte budget `persist` accepts, never dropping an in-progress episode. So the record the reducer produces is the record written, and a restart seeds exactly the state that was running. `persist` serializes as-is and refuses a record it could not load back rather than trimming one.
 
 On startup, the persistence lane loads once before normal summary accumulation. On rollover or relevant state change, the coordinator replaces one latest-summary slot and sends a capacity-one wakeup; the writer always takes the newest complete state. Obsolete pending summaries are coalesced rather than queued.
 

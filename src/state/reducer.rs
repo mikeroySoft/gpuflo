@@ -633,6 +633,23 @@ impl Reducer {
         }
     }
 
+    /// Records the kernel's slow health observation in the daily summary.
+    pub fn observe_kernel_health(
+        &mut self,
+        gpu: &PhysicalGpuId,
+        observed_at: Timestamp,
+        reasons: Option<&str>,
+    ) {
+        let local = observed_at.as_odt().to_offset(self.local_offset);
+        self.daily.roll(local.date());
+        self.daily.observe_health(
+            gpu.as_str(),
+            observed_at.as_odt(),
+            self.local_offset,
+            reasons,
+        );
+    }
+
     /// Clears session peaks (public `ResetSessionPeaks` command).
     pub fn reset_session_peaks(&mut self) {
         for gpu in &mut self.gpus {
