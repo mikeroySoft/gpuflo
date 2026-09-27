@@ -448,3 +448,49 @@ fn discovered_platforms_agree_in_json_and_ndjson() {
         }
     }
 }
+
+#[test]
+#[cfg(debug_assertions)]
+fn bounded_stream_exits_with_complete_increasing_records() {
+    use std::process::Command;
+
+    let output = Command::new(env!("CARGO_BIN_EXE_gpuflo"))
+        .env(
+            "GPUFLO_HOST_ROOT",
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/kernel/apu-strix-halo"),
+        )
+        .env_remove("HOME")
+        .env_remove("XDG_CONFIG_HOME")
+        .env_remove("XDG_STATE_HOME")
+        .args(["--json-stream", "--for", "0.9s"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let lines: Vec<_> = output.stdout.split(|byte| *byte == b'\n').collect();
+    assert_eq!(lines.last(), Some(&&[][..]), "incomplete final line");
+    let sequences: Vec<u64> = lines[..lines.len() - 1]
+        .iter()
+        .map(|line| {
+            serde_json::from_slice::<Value>(line).unwrap()["sequence"]
+                .as_u64()
+                .unwrap()
+        })
+        .collect();
+    assert!(sequences.len() >= 2, "{sequences:?}");
+    assert!(sequences.windows(2).all(|pair| pair[0] < pair[1]));
+}
+
+#[test]
+fn for_requires_stream_and_valid_duration() {
+    use std::process::Command;
+
+    for args in [["--json", "--for", "5s"], ["--json-stream", "--for", "abc"]] {
+        let output = Command::new(env!("CARGO_BIN_EXE_gpuflo"))
+            .args(args)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(2), "{output:?}");
+        assert!(String::from_utf8_lossy(&output.stderr).contains("--for"));
+    }
+}

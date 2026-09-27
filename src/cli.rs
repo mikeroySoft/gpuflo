@@ -1,10 +1,11 @@
 //! Fixed CLI surface parsed with `lexopt`.
 //!
 //! Accepted options are exactly `--help`, `--version`, `--once`, `--json`,
-//! `--json-stream`, `--tiny`, `--gpu`, `--theme`, `--mode`, `--no-color`, and
-//! `--cat`. Contains no telemetry or product-state rules.
+//! `--json-stream`, `--for`, `--tiny`, `--gpu`, `--theme`, `--mode`,
+//! `--no-color`, and `--cat`. Contains no telemetry or product-state rules.
 
 use std::ffi::OsString;
+use std::time::Duration;
 
 use crate::config::{ModePreference, Theme};
 use crate::model::PciBdf;
@@ -21,6 +22,7 @@ Output modes (mutually exclusive):
   --once           Print one human-readable line per physical GPU, then exit
   --json           Print one pretty JSON snapshot of every physical GPU, then exit
   --json-stream    Print compact NDJSON snapshots continuously
+  --for <DURATION> Limit --json-stream to a window (seconds, or s/m/h suffix)
   --tiny           Print one status line for the selected physical GPU, then exit
 
 Selection:
@@ -92,6 +94,7 @@ impl GpuSelector {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CliOptions {
     pub output: OutputMode,
+    pub duration: Option<Duration>,
     pub gpu: Option<GpuSelector>,
     pub theme: Option<Theme>,
     pub mode: Option<ModePreference>,
@@ -124,6 +127,7 @@ where
     let mut output: Option<OutputMode> = None;
     let mut options = CliOptions {
         output: OutputMode::Interactive,
+        duration: None,
         gpu: None,
         theme: None,
         mode: None,
@@ -151,6 +155,14 @@ where
             Long("json") => set_output(OutputMode::Json, &mut output)?,
             Long("json-stream") => set_output(OutputMode::JsonStream, &mut output)?,
             Long("tiny") => set_output(OutputMode::Tiny, &mut output)?,
+            Long("for") => {
+                let value = parser
+                    .value()
+                    .map_err(|e| UsageError(e.to_string()))?
+                    .into_string()
+                    .map_err(|_| UsageError("--for value is not valid UTF-8".to_owned()))?;
+                options.duration = Some(parse_duration(&value)?);
+            }
             Long("gpu") => {
                 let value = parser
                     .value()
@@ -187,7 +199,27 @@ where
     }
 
     options.output = output.unwrap_or(OutputMode::Interactive);
+    if options.duration.is_some() && options.output != OutputMode::JsonStream {
+        return Err(UsageError(
+            "--for requires --json-stream and conflicts with other output modes".to_owned(),
+        ));
+    }
     Ok(Invocation::Run(options))
+}
+
+fn parse_duration(text: &str) -> Result<Duration, UsageError> {
+    let (number, multiplier) = match text.as_bytes().last() {
+        Some(b's') => (&text[..text.len() - 1], 1.0),
+        Some(b'm') => (&text[..text.len() - 1], 60.0),
+        Some(b'h') => (&text[..text.len() - 1], 3600.0),
+        _ => (text, 1.0),
+    };
+    let seconds = number.parse::<f64>().unwrap_or(f64::NAN) * multiplier;
+    if !seconds.is_finite() || seconds <= 0.0 {
+        return Err(UsageError(format!("invalid --for duration: {text}")));
+    }
+    Duration::try_from_secs_f64(seconds)
+        .map_err(|_| UsageError(format!("invalid --for duration: {text}")))
 }
 
 fn render_arg(arg: &lexopt::Arg<'_>) -> String {
@@ -277,6 +309,16 @@ mod tests {
         assert!(run(&["--frobnicate"]).is_err());
         assert!(run(&["-x"]).is_err());
         assert!(run(&["positional"]).is_err());
+    }
+
+    #[test]
+    fn durations_parse_and_reject_invalid_values() {
+        for (text, seconds) in [("10", 10), ("90s", 90), ("2.5m", 150), ("1h", 3600)] {
+            assert_eq!(parse_duration(text).unwrap(), Duration::from_secs(seconds));
+        }
+        for text in ["0", "-1", "abc", "", "NaN", "inf"] {
+            assert!(parse_duration(text).is_err(), "{text}");
+        }
     }
 
     #[test]

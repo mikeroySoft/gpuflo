@@ -272,6 +272,7 @@ Run `gpuflo --help` for the authoritative option reference.
 | `--once` | Print one human-readable line per physical GPU, then exit |
 | `--json` | Print one pretty schema-version-1 JSON snapshot containing every physical GPU, then exit |
 | `--json-stream` | Continuously print compact NDJSON snapshots at the production cadence |
+| `--for <duration>` | Stop `--json-stream` after a window; positive seconds (bare or `s`), minutes (`m`), or hours (`h`), including decimals |
 | `--tiny` | Print one selected-GPU status line, then exit |
 | `--gpu <index\|id\|bdf>` | Select the GPU for `--tiny` or the initial interactive selection |
 | `--theme <buffalo\|nord\|monochrome>` | Select the interactive theme |
@@ -290,6 +291,9 @@ gpuflo --json
 
 # Continuous records; broken pipe is a successful exit
 gpuflo --json-stream | head -n 10
+
+# Capture a bounded stream without a supervisor
+gpuflo --json-stream --for 2.5m > capture.ndjson
 
 # One selected GPU by PCI address
 gpuflo --tiny --gpu 0000:03:00.0
