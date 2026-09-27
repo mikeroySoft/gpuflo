@@ -20,7 +20,7 @@ use crate::persist::{self, PersistLane};
 use crate::source::amdsmi::AmdSmi;
 use crate::source::kernel::{KernelDevice, KernelSource};
 use crate::source::process::{ProcessSample, ProcessSource};
-use crate::source::{KernelFastSample, KernelSlowSample, Reading};
+use crate::source::{KernelFastSample, KernelHealthSignal, KernelSlowSample, Reading};
 use crate::state::reducer::{Now, Reducer};
 use crate::state::{Lane, ProcessOverlay, RenderModel, StateEffect};
 
@@ -1272,6 +1272,14 @@ impl Coordinator {
                         if sample.device_missing {
                             self.discovery.dispatch(now);
                         }
+                        let reasons = sample.health.iter().find_map(|signal| match signal {
+                            KernelHealthSignal::ThrottleActive { reasons } => {
+                                Some(reasons.as_str())
+                            }
+                            _ => None,
+                        });
+                        self.reducer
+                            .observe_kernel_health(&sample.gpu, sample.read_wall, reasons);
                         let (batches, report) = normalize::kernel_slow(sample);
                         for batch in batches {
                             self.reducer.apply_batch_at(batch, Some(now));

@@ -206,6 +206,7 @@ mod tests {
                 activity_peak_percent: Some(peak),
                 memory_peak_percent: Some(50.0),
                 energy_joules: None,
+                throttle_episodes: Vec::new(),
             },
         );
         DailySummaryRecord {

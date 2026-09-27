@@ -7,10 +7,11 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
-use time::Date;
+use time::{Date, OffsetDateTime, UtcOffset, format_description::well_known::Rfc3339};
 
 /// Approved history capacity: 240 points over 60 seconds.
 pub(crate) const HISTORY_CAPACITY: usize = 240;
+const MAX_THROTTLE_EPISODES: usize = 64;
 
 /// Fixed-capacity per-tick history ring.
 #[derive(Debug, Clone)]
@@ -77,6 +78,23 @@ pub(crate) struct GpuDailyRecord {
     /// Accumulated socket energy, joules, when the source exposes energy.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub energy_joules: Option<f64>,
+    /// Throttle episodes observed today, in observation order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub throttle_episodes: Vec<ThrottleEpisode>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub(crate) struct ThrottleEpisode {
+    /// Local time the episode was first observed, RFC 3339.
+    pub started_at: String,
+    /// Local time the episode was first observed to have ended, RFC 3339.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ended_at: Option<String>,
+    /// Seconds between started_at and ended_at.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_seconds: Option<f64>,
+    /// Source-named reason groups, as first observed.
+    pub reasons: String,
 }
 
 /// In-memory accumulation of the current local day's summary.
@@ -157,6 +175,56 @@ impl DailyAccumulator {
         let entry = self.gpus.entry(gpu.to_owned()).or_default();
         *entry.energy_joules.get_or_insert(0.0) += joules;
         self.dirty = true;
+    }
+
+    /// Updates an episode on each accepted slow health observation.
+    pub fn observe_health(
+        &mut self,
+        gpu: &str,
+        observed_at: OffsetDateTime,
+        offset: UtcOffset,
+        reasons: Option<&str>,
+    ) {
+        let entry = self.gpus.entry(gpu.to_owned()).or_default();
+        let episodes = &mut entry.throttle_episodes;
+        let open = episodes
+            .last()
+            .is_some_and(|episode| episode.ended_at.is_none());
+        match (open, reasons) {
+            (false, Some(reasons)) => {
+                if episodes.len() == MAX_THROTTLE_EPISODES
+                    && let Some(index) = episodes
+                        .iter()
+                        .position(|episode| episode.ended_at.is_some())
+                {
+                    episodes.remove(index);
+                }
+                episodes.push(ThrottleEpisode {
+                    started_at: observed_at
+                        .to_offset(offset)
+                        .format(&Rfc3339)
+                        .expect("valid timestamp"),
+                    ended_at: None,
+                    duration_seconds: None,
+                    reasons: reasons.to_owned(),
+                });
+                self.dirty = true;
+            }
+            (true, None) => {
+                let episode = episodes.last_mut().expect("open episode");
+                let start = OffsetDateTime::parse(&episode.started_at, &Rfc3339)
+                    .expect("persisted episode timestamp");
+                episode.ended_at = Some(
+                    observed_at
+                        .to_offset(offset)
+                        .format(&Rfc3339)
+                        .expect("valid timestamp"),
+                );
+                episode.duration_seconds = Some((observed_at - start).as_seconds_f64());
+                self.dirty = true;
+            }
+            _ => {}
+        }
     }
 
     /// Whether the summary changed since the last [`Self::record`] call.
@@ -254,5 +322,88 @@ mod tests {
             seeded.record().gpus["gpu-a"].activity_peak_percent,
             Some(99.0)
         );
+    }
+    #[test]
+    fn throttle_episodes_close_and_keep_first_reasons() {
+        let mut daily = DailyAccumulator::new(date!(2026 - 08 - 21));
+        let start = date!(2026 - 08 - 21).midnight().assume_utc();
+        daily.observe_health("gpu-a", start, UtcOffset::UTC, Some("thermal"));
+        daily.observe_health(
+            "gpu-a",
+            start + time::Duration::seconds(2),
+            UtcOffset::UTC,
+            Some("power"),
+        );
+        let open = serde_json::to_value(daily.record()).unwrap();
+        let episode = &open["gpus"]["gpu-a"]["throttle_episodes"][0];
+        assert!(episode.get("ended_at").is_none());
+        assert!(episode.get("duration_seconds").is_none());
+        daily.observe_health(
+            "gpu-a",
+            start + time::Duration::seconds(5),
+            UtcOffset::UTC,
+            None,
+        );
+        let episodes = &daily.record().gpus["gpu-a"].throttle_episodes;
+        assert_eq!(episodes.len(), 1);
+        assert_eq!(episodes[0].reasons, "thermal");
+        assert_eq!(episodes[0].duration_seconds, Some(5.0));
+        assert!(episodes[0].ended_at.is_some());
+        daily.observe_health(
+            "gpu-a",
+            start + time::Duration::seconds(6),
+            UtcOffset::UTC,
+            Some("power"),
+        );
+        assert_eq!(daily.record().gpus["gpu-a"].throttle_episodes.len(), 2);
+    }
+
+    #[test]
+    fn throttle_roll_seed_and_legacy_record() {
+        let start = date!(2026 - 08 - 21).midnight().assume_utc();
+        let mut daily = DailyAccumulator::new(date!(2026 - 08 - 21));
+        daily.observe_health("gpu-a", start, UtcOffset::UTC, Some("thermal"));
+        let record = daily.record();
+        let mut restored = DailyAccumulator::new(date!(2026 - 08 - 21));
+        restored.seed(&record);
+        restored.observe_health(
+            "gpu-a",
+            start + time::Duration::seconds(3),
+            UtcOffset::UTC,
+            None,
+        );
+        assert_eq!(
+            restored.record().gpus["gpu-a"].throttle_episodes[0].duration_seconds,
+            Some(3.0)
+        );
+        assert!(daily.roll(date!(2026 - 08 - 22)));
+        assert!(daily.record().gpus.is_empty());
+        let legacy: DailySummaryRecord = serde_json::from_str(
+            r#"{"date":"2026-08-21","gpus":{"gpu-a":{"activity_peak_percent":10}}}"#,
+        )
+        .unwrap();
+        assert!(legacy.gpus["gpu-a"].throttle_episodes.is_empty());
+    }
+
+    #[test]
+    fn throttle_cap_drops_oldest_closed_and_keeps_open() {
+        let mut daily = DailyAccumulator::new(date!(2026 - 08 - 21));
+        let start = date!(2026 - 08 - 21).midnight().assume_utc();
+        for n in 0..=MAX_THROTTLE_EPISODES {
+            let at = start + time::Duration::seconds((n * 2) as i64);
+            daily.observe_health("gpu-a", at, UtcOffset::UTC, Some("thermal"));
+            if n < MAX_THROTTLE_EPISODES {
+                daily.observe_health(
+                    "gpu-a",
+                    at + time::Duration::seconds(1),
+                    UtcOffset::UTC,
+                    None,
+                );
+            }
+        }
+        let episodes = &daily.record().gpus["gpu-a"].throttle_episodes;
+        assert_eq!(episodes.len(), MAX_THROTTLE_EPISODES);
+        assert!(!episodes[0].started_at.ends_with("00:00:00Z"));
+        assert!(episodes.last().unwrap().ended_at.is_none());
     }
 }
