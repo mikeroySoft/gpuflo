@@ -269,6 +269,7 @@ mod tests {
     fn cli_defaults() -> CliOptions {
         CliOptions {
             output: OutputMode::Interactive,
+            duration: None,
             gpu: None,
             theme: None,
             mode: None,

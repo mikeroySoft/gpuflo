@@ -77,7 +77,7 @@ pub(crate) fn run_from_env() -> u8 {
             output::write_json(out, &snapshot)
         }),
         OutputMode::Tiny => one_shot(monitor, &options, write_tiny),
-        OutputMode::JsonStream => json_stream(monitor),
+        OutputMode::JsonStream => json_stream(monitor, options.duration),
         OutputMode::Interactive => {
             if options.gpu.is_some() {
                 let snapshot = match first_snapshot(&monitor) {
@@ -225,7 +225,7 @@ fn write_tiny(
 }
 
 /// Continuous compact NDJSON at production cadence.
-fn json_stream(monitor: Monitor) -> u8 {
+fn json_stream(monitor: Monitor, duration: Option<Duration>) -> u8 {
     let sigint = Arc::new(AtomicBool::new(false));
     if let Err(error) =
         signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&sigint))
@@ -235,13 +235,23 @@ fn json_stream(monitor: Monitor) -> u8 {
         return EXIT_FATAL;
     }
     let stdout = std::io::stdout();
+    let deadline = duration.map(|duration| std::time::Instant::now() + duration);
     let mut out = stdout.lock();
     let mut broken_pipe = false;
     let code = loop {
         if sigint.load(Ordering::SeqCst) {
             break EXIT_SIGINT;
         }
-        match monitor.receive_timeout(Duration::from_millis(250)) {
+        let remaining =
+            deadline.map(|end| end.saturating_duration_since(std::time::Instant::now()));
+        if remaining == Some(Duration::ZERO) {
+            break EXIT_OK;
+        }
+        match monitor.receive_timeout(
+            remaining
+                .unwrap_or(Duration::from_millis(250))
+                .min(Duration::from_millis(250)),
+        ) {
             Ok(MonitorEvent::Snapshot(snapshot)) => {
                 match output::write_ndjson_line(&mut out, &snapshot) {
                     Ok(()) => {}
