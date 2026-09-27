@@ -13,10 +13,10 @@ use std::time::Duration;
 
 use crossbeam_channel::{Receiver, Sender, bounded};
 
-use crate::state::history::DailySummaryRecord;
+use crate::state::history::{DailySummaryRecord, ThrottleEpisode};
 
 /// Daily summaries are tiny; refuse planted or corrupted oversized files.
-const MAX_RECORD_BYTES: u64 = 64 * 1024;
+pub(crate) const MAX_RECORD_BYTES: u64 = 64 * 1024;
 /// Process-local uniqueness for `create_new` temporary files.
 static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
@@ -67,7 +67,40 @@ pub(crate) fn load(path: &Path) -> Result<Option<DailySummaryRecord>, String> {
 pub(crate) fn store(path: &Path, record: &DailySummaryRecord) -> std::io::Result<()> {
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
     std::fs::create_dir_all(parent)?;
-    let body = serde_json::to_vec_pretty(record)?;
+    let mut bounded = record.clone();
+    let body = loop {
+        let mut body = serde_json::to_vec_pretty(&bounded)?;
+        body.push(b'\n');
+        if body.len() as u64 <= MAX_RECORD_BYTES {
+            break body;
+        }
+        let oldest = bounded
+            .gpus
+            .iter()
+            .filter_map(|(gpu, entry)| {
+                entry
+                    .throttle_episodes
+                    .iter()
+                    .position(|episode| episode.ended_at.is_some())
+                    .map(|index| (gpu, index, &entry.throttle_episodes[index]))
+            })
+            .min_by_key(|(_, _, episode): &(_, _, &ThrottleEpisode)| {
+                time::OffsetDateTime::parse(
+                    &episode.started_at,
+                    &time::format_description::well_known::Rfc3339,
+                )
+                .ok()
+            });
+        let Some((gpu, index)) = oldest.map(|(gpu, index, _)| (gpu.clone(), index)) else {
+            return Err(std::io::Error::other("daily summary exceeds 64 KiB"));
+        };
+        bounded
+            .gpus
+            .get_mut(&gpu)
+            .unwrap()
+            .throttle_episodes
+            .remove(index);
+    };
     let (tmp, mut file) = loop {
         let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         let mut name = path.as_os_str().to_owned();
@@ -85,7 +118,6 @@ pub(crate) fn store(path: &Path, record: &DailySummaryRecord) -> std::io::Result
     };
     let result = (|| {
         file.write_all(&body)?;
-        file.write_all(b"\n")?;
         file.sync_all()?;
         std::fs::rename(&tmp, path)?;
         std::fs::File::open(parent)?.sync_all()
@@ -257,6 +289,44 @@ mod tests {
             .collect();
         assert_eq!(entries, vec![std::ffi::OsString::from("daily.json")]);
         let _ = std::fs::remove_dir_all(path.parent().unwrap().parent().unwrap());
+    }
+
+    #[test]
+    fn multi_gpu_episodes_fit_load_budget_and_preserve_open() {
+        let path = temp_path("budget/daily.json");
+        let mut summary = record("2026-08-21", 80.0);
+        for gpu in 0..8 {
+            let mut entry = GpuDailyRecord::default();
+            for n in 0..64 {
+                entry.throttle_episodes.push(ThrottleEpisode {
+                    started_at: format!("2026-08-21T00:{n:02}:00Z"),
+                    ended_at: (n != 63).then(|| format!("2026-08-21T00:{n:02}:01Z")),
+                    duration_seconds: (n != 63).then_some(1.0),
+                    reasons: "thermal".into(),
+                });
+            }
+            summary.gpus.insert(format!("gpu-{gpu}"), entry);
+        }
+        store(&path, &summary).unwrap();
+        assert!(std::fs::metadata(&path).unwrap().len() <= MAX_RECORD_BYTES);
+        let loaded = load(&path).unwrap().unwrap();
+        assert!(
+            loaded
+                .gpus
+                .values()
+                .any(|gpu| gpu.throttle_episodes.len() < 64)
+        );
+        for gpu in 0..8 {
+            assert!(
+                loaded.gpus[&format!("gpu-{gpu}")]
+                    .throttle_episodes
+                    .last()
+                    .unwrap()
+                    .ended_at
+                    .is_none()
+            );
+        }
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 
     #[test]

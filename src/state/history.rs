@@ -192,7 +192,7 @@ impl DailyAccumulator {
             .is_some_and(|episode| episode.ended_at.is_none());
         match (open, reasons) {
             (false, Some(reasons)) => {
-                if episodes.len() == MAX_THROTTLE_EPISODES
+                if episodes.len() >= MAX_THROTTLE_EPISODES
                     && let Some(index) = episodes
                         .iter()
                         .position(|episode| episode.ended_at.is_some())
@@ -212,15 +212,15 @@ impl DailyAccumulator {
             }
             (true, None) => {
                 let episode = episodes.last_mut().expect("open episode");
-                let start = OffsetDateTime::parse(&episode.started_at, &Rfc3339)
-                    .expect("persisted episode timestamp");
+                let start = OffsetDateTime::parse(&episode.started_at, &Rfc3339).ok();
                 episode.ended_at = Some(
                     observed_at
                         .to_offset(offset)
                         .format(&Rfc3339)
                         .expect("valid timestamp"),
                 );
-                episode.duration_seconds = Some((observed_at - start).as_seconds_f64());
+                episode.duration_seconds =
+                    start.map(|start| (observed_at - start).as_seconds_f64());
                 self.dirty = true;
             }
             _ => {}
@@ -383,6 +383,34 @@ mod tests {
         )
         .unwrap();
         assert!(legacy.gpus["gpu-a"].throttle_episodes.is_empty());
+    }
+
+    #[test]
+    fn malformed_seeded_start_closes_without_panicking() {
+        let mut daily = DailyAccumulator::new(date!(2026 - 08 - 21));
+        let mut record = daily.record();
+        record.gpus.insert(
+            "gpu-a".into(),
+            GpuDailyRecord {
+                throttle_episodes: vec![ThrottleEpisode {
+                    started_at: "invalid".into(),
+                    ended_at: None,
+                    duration_seconds: None,
+                    reasons: "thermal".into(),
+                }],
+                ..Default::default()
+            },
+        );
+        daily.seed(&record);
+        daily.observe_health(
+            "gpu-a",
+            date!(2026 - 08 - 21).midnight().assume_utc(),
+            UtcOffset::UTC,
+            None,
+        );
+        let episode = &daily.record().gpus["gpu-a"].throttle_episodes[0];
+        assert!(episode.ended_at.is_some());
+        assert_eq!(episode.duration_seconds, None);
     }
 
     #[test]
