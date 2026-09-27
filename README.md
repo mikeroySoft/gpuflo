@@ -380,6 +380,26 @@ A stale observation preserves the last good source time but contains no numeric 
 
 GPUFlo never emits JSON `null`, `NaN`, infinity, a stale numeric value, or an unavailable numeric zero. NDJSON records are independently valid objects. Sequence gaps can reveal that a slow consumer missed superseded snapshots; collection remains bounded instead of accumulating an unbounded queue.
 
+### Compatibility policy
+
+`schema_version` is the machine-output compatibility key and is currently `1`.
+Pin on it; the invariants above are part of the contract a major version
+protects, not incidental behavior.
+
+Within a major version GPUFlo may add envelope, physical-GPU, and partition
+fields, and may emit `state` strings beyond the seven documented states.
+Consumers must ignore unknown object keys and must treat an unrecognized `state`
+as "unavailable, reason unknown" rather than as an error—GPUFlo's own model
+round-trips an unknown `state` string unchanged instead of collapsing it into a
+known value, and consumers are expected to do the same.
+
+`schema_version` increments only when an existing field is removed, renamed,
+retyped, or has its meaning changed.
+
+`gpuflo_version` is the semver of the producing binary and is not a payload
+compatibility key. A newer `gpuflo_version` reporting the same `schema_version`
+makes no breaking payload change; consumers pin on `schema_version` instead.
+
 ## Configuration
 
 The optional configuration file is:
@@ -485,6 +505,9 @@ The package also exposes a narrow semver-supported Rust interface:
 - `Monitor` and `MonitorOptions`;
 - owned `MonitorEvent::Snapshot`, `Notice`, and `Fatal` events;
 - bounded receive, command, process-scope, peak-reset, and shutdown operations.
+
+This interface is versioned by the package's semver; the machine-output payload
+is versioned separately by [`schema_version`](#compatibility-policy).
 
 Minimal use:
 
