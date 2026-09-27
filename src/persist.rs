@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use crossbeam_channel::{Receiver, Sender, bounded};
 
-use crate::state::history::{DailySummaryRecord, ThrottleEpisode};
+use crate::state::history::DailySummaryRecord;
 
 /// Daily summaries are tiny; refuse planted or corrupted oversized files.
 pub(crate) const MAX_RECORD_BYTES: u64 = 64 * 1024;
@@ -61,46 +61,31 @@ pub(crate) fn load(path: &Path) -> Result<Option<DailySummaryRecord>, String> {
         .map_err(|error| format!("invalid daily summary {}: {error}", path.display()))
 }
 
+/// The exact bytes [`store`] writes for `record`. The reducer measures its
+/// canonical record against [`MAX_RECORD_BYTES`] through this encoding.
+pub(crate) fn encode(record: &DailySummaryRecord) -> serde_json::Result<Vec<u8>> {
+    let mut body = serde_json::to_vec_pretty(record)?;
+    body.push(b'\n');
+    Ok(body)
+}
+
 /// Writes the record atomically: an exclusive, same-directory temporary
 /// regular file, flush, fsync, then rename. `create_new` refuses a planted
 /// symlink; a failure leaves any previous complete file intact.
+///
+/// The record is serialized as-is. A record that does not fit the budget
+/// [`load`] accepts is refused rather than written or trimmed here: bounding
+/// the record is the accumulator's job, so the file always matches the
+/// canonical summary.
 pub(crate) fn store(path: &Path, record: &DailySummaryRecord) -> std::io::Result<()> {
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
     std::fs::create_dir_all(parent)?;
-    let mut bounded = record.clone();
-    let body = loop {
-        let mut body = serde_json::to_vec_pretty(&bounded)?;
-        body.push(b'\n');
-        if body.len() as u64 <= MAX_RECORD_BYTES {
-            break body;
-        }
-        let oldest = bounded
-            .gpus
-            .iter()
-            .filter_map(|(gpu, entry)| {
-                entry
-                    .throttle_episodes
-                    .iter()
-                    .position(|episode| episode.ended_at.is_some())
-                    .map(|index| (gpu, index, &entry.throttle_episodes[index]))
-            })
-            .min_by_key(|(_, _, episode): &(_, _, &ThrottleEpisode)| {
-                time::OffsetDateTime::parse(
-                    &episode.started_at,
-                    &time::format_description::well_known::Rfc3339,
-                )
-                .ok()
-            });
-        let Some((gpu, index)) = oldest.map(|(gpu, index, _)| (gpu.clone(), index)) else {
-            return Err(std::io::Error::other("daily summary exceeds 64 KiB"));
-        };
-        bounded
-            .gpus
-            .get_mut(&gpu)
-            .unwrap()
-            .throttle_episodes
-            .remove(index);
-    };
+    let body = encode(record)?;
+    if body.len() as u64 > MAX_RECORD_BYTES {
+        return Err(std::io::Error::other(format!(
+            "daily summary exceeds {MAX_RECORD_BYTES} bytes"
+        )));
+    }
     let (tmp, mut file) = loop {
         let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         let mut name = path.as_os_str().to_owned();
@@ -225,8 +210,11 @@ mod tests {
     use std::collections::BTreeMap;
     use std::os::unix::fs::DirBuilderExt;
 
+    use time::UtcOffset;
+    use time::macros::date;
+
     use super::*;
-    use crate::state::history::GpuDailyRecord;
+    use crate::state::history::{DailyAccumulator, GpuDailyRecord, ThrottleEpisode};
 
     static TEST_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
@@ -292,40 +280,65 @@ mod tests {
     }
 
     #[test]
-    fn multi_gpu_episodes_fit_load_budget_and_preserve_open() {
+    fn multi_gpu_accumulator_record_round_trips_unchanged() {
         let path = temp_path("budget/daily.json");
-        let mut summary = record("2026-08-21", 80.0);
-        for gpu in 0..8 {
-            let mut entry = GpuDailyRecord::default();
+        let mut daily = DailyAccumulator::new(date!(2026 - 08 - 21));
+        let start = date!(2026 - 08 - 21).midnight().assume_utc();
+        let gpus: Vec<String> = (0..8)
+            .map(|n| format!("pci-0000:{n:02}:00.0-amdgpu-primary-{n}"))
+            .collect();
+        for gpu in &gpus {
             for n in 0..64 {
-                entry.throttle_episodes.push(ThrottleEpisode {
-                    started_at: format!("2026-08-21T00:{n:02}:00Z"),
-                    ended_at: (n != 63).then(|| format!("2026-08-21T00:{n:02}:01Z")),
-                    duration_seconds: (n != 63).then_some(1.0),
-                    reasons: "thermal".into(),
-                });
+                let at = start + time::Duration::seconds(n * 60);
+                daily.observe_health(
+                    gpu,
+                    at,
+                    UtcOffset::UTC,
+                    Some("thermal, power, current, other accumulated"),
+                );
+                if n < 63 {
+                    daily.observe_health(
+                        gpu,
+                        at + time::Duration::seconds(30),
+                        UtcOffset::UTC,
+                        None,
+                    );
+                }
             }
-            summary.gpus.insert(format!("gpu-{gpu}"), entry);
         }
-        store(&path, &summary).unwrap();
+        // The accumulator already bounds the record; store writes it as-is and
+        // load accepts it, so a restart seeds exactly what was running.
+        let canonical = daily.record();
+        store(&path, &canonical).unwrap();
         assert!(std::fs::metadata(&path).unwrap().len() <= MAX_RECORD_BYTES);
         let loaded = load(&path).unwrap().unwrap();
-        assert!(
-            loaded
-                .gpus
-                .values()
-                .any(|gpu| gpu.throttle_episodes.len() < 64)
+        assert_eq!(loaded, canonical);
+        let mut restored = DailyAccumulator::new(date!(2026 - 08 - 21));
+        restored.seed(&loaded);
+        assert_eq!(restored.record(), canonical);
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn store_refuses_a_record_beyond_the_load_budget() {
+        let path = temp_path("oversized-store/daily.json");
+        let first = record("2026-08-21", 80.0);
+        store(&path, &first).unwrap();
+        let mut oversized = record("2026-08-21", 90.0);
+        oversized.gpus.insert(
+            "gpu-b".to_owned(),
+            GpuDailyRecord {
+                throttle_episodes: vec![ThrottleEpisode {
+                    started_at: "2026-08-21T00:00:00Z".to_owned(),
+                    ended_at: None,
+                    duration_seconds: None,
+                    reasons: "x".repeat(MAX_RECORD_BYTES as usize),
+                }],
+                ..Default::default()
+            },
         );
-        for gpu in 0..8 {
-            assert!(
-                loaded.gpus[&format!("gpu-{gpu}")]
-                    .throttle_episodes
-                    .last()
-                    .unwrap()
-                    .ended_at
-                    .is_none()
-            );
-        }
+        assert!(store(&path, &oversized).is_err());
+        assert_eq!(load(&path).unwrap(), Some(first));
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 
