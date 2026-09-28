@@ -94,6 +94,21 @@ cargo build --release --locked
 ./target/release/gpuflo
 ```
 
+### Noctalia desktop and bar widgets
+
+The repository includes a native Noctalia v5 plugin with a taskbar status
+widget and a persistent desktop overlay. From a source checkout:
+
+```sh
+noctalia msg plugins source add gpuflo path "$PWD/plugins/noctalia"
+noctalia msg plugins enable mikeroysoft/gpuflo
+```
+
+Add `GPUFlo` to the bar from **Settings → Bar → Widgets**, then add its
+desktop widget from **Settings → Desktop → Toggle Editor**. Both surfaces
+share one `gpuflo --json-stream` process; clicking the bar widget opens the
+full GPUFlo dashboard in a terminal.
+
 ### Release packages
 
 The release workflow produces a qualified `x86_64-unknown-linux-gnu` archive containing exactly:

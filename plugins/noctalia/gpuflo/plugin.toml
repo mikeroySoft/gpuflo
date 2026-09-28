@@ -1,0 +1,22 @@
+id = "mikeroysoft/gpuflo"
+name = "GPUFlo"
+version = "0.1.0"
+plugin_api = 17
+author = "mikeroysoft"
+license = "MIT"
+dependencies = ["gpuflo"]
+tags = ["amd", "gpu", "monitoring"]
+icon = "device-desktop-analytics"
+description = "Live GPUFlo telemetry for the Noctalia bar and desktop."
+
+[[widget]]
+id = "status"
+entry = "bar.luau"
+
+[[desktop_widget]]
+id = "overlay"
+entry = "desktop.luau"
+
+[[service]]
+id = "telemetry"
+entry = "service.luau"

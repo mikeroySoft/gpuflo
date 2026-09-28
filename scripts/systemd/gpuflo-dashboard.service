@@ -1,0 +1,17 @@
+# gpuflo AI-factory dashboard (long-running; http://0.0.0.0:8766/).
+# Install:
+#   systemctl --user link /home/mike/dev/mikeroysoft/gpuflo/scripts/systemd/gpuflo-dashboard.service
+#   systemctl --user enable --now gpuflo-dashboard.service
+#   loginctl enable-linger   # user services start at boot, not at login
+[Unit]
+Description=gpuflo AI factory dashboard
+After=network.target
+
+[Service]
+WorkingDirectory=/home/mike/dev/mikeroysoft/gpuflo
+ExecStart=/usr/bin/python3 scripts/factory_dashboard.py --host 0.0.0.0 --port 8766 --no-open
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
