@@ -515,6 +515,10 @@ The package also exposes a narrow semver-supported Rust interface:
 This interface is versioned by the package's semver; the machine-output payload
 is versioned separately by [`schema_version`](#compatibility-policy).
 
+The model structs are `#[non_exhaustive]`: obtain them from `Monitor` events
+or by deserializing GPUFlo JSON, then read their public fields. New fields may
+arrive in minor releases.
+
 Minimal use:
 
 ```rust

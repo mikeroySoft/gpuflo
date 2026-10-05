@@ -3,6 +3,10 @@
 //! Only the canonical model types re-exported here and the narrow
 //! [`Monitor`] interface are semver-supported. Everything else is private
 //! and may change without notice.
+//!
+//! Public model structs are `#[non_exhaustive]`: obtain values from [`Monitor`]
+//! events or deserialize gpuflo JSON, and read their public fields. Minor
+//! releases may add fields.
 
 #![warn(missing_docs)]
 

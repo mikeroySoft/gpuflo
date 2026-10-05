@@ -185,21 +185,12 @@ string_backed! {
 /// have one place to resolve device-specific quirks instead of inline
 /// device-ID comparisons.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Platform {
     /// The recognized family, or a generic/unknown fallback.
     pub id: PlatformId,
     /// The memory pool this platform's evidence resolves to.
     pub memory_pool: MemoryPool,
-}
-
-impl Platform {
-    /// Whether this platform has a monitorable NPU. Always `false` today —
-    /// no platform entry wires up NPU capability yet; a future branch adding
-    /// NPU monitoring extends this rather than re-deriving platform
-    /// identity from scratch.
-    pub fn has_npu(&self) -> bool {
-        false
-    }
 }
 
 impl Default for Platform {
@@ -374,6 +365,7 @@ impl fmt::Display for PartitionId {
 
 /// The highest-priority active source-backed health condition of one GPU.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Health {
     /// Priority class for automation.
     pub category: HealthCategory,
@@ -385,6 +377,7 @@ pub struct Health {
 
 /// Socket-scoped temperature owned by the physical GPU.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Temperature {
     /// Hotspot (junction) temperature.
     pub hotspot_celsius: Observation<f64>,
@@ -394,6 +387,7 @@ pub struct Temperature {
 
 /// Socket-scoped power owned by the physical GPU.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Power {
     /// Current socket power draw.
     pub socket_watts: Observation<f64>,
@@ -403,6 +397,7 @@ pub struct Power {
 
 /// Partition-scoped memory occupancy for the applicable pool.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Memory {
     /// The applicable pool; unknown future pools round-trip unchanged.
     pub pool: MemoryPool,
@@ -416,6 +411,7 @@ pub struct Memory {
 
 /// One XCP partition. Activity, memory, and clocks are partition-scoped.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Partition {
     /// Opaque stable partition identity.
     pub id: PartitionId,
@@ -435,6 +431,7 @@ pub struct Partition {
 
 /// One physical GPU package/socket, owning socket-scoped observations.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct PhysicalGpu {
     /// Opaque stable identity.
     pub id: PhysicalGpuId,
@@ -465,6 +462,7 @@ pub struct PhysicalGpu {
 
 /// One exportable view of every discovered physical GPU.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Snapshot {
     /// Integer major version of the machine-output schema.
     pub schema_version: u32,
