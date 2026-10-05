@@ -29,7 +29,7 @@ It is strictly local and read-only. GPUFlo reads Linux `amdgpu` kernel interface
 - **100 positive rotating taglines**—one is chosen randomly at launch and remains stable for that session.
 - **Optional sleeping ASCII cat** (`--cat`)—naps in the margin once the selected GPU is warm; pure decoration, never touches telemetry.
 - **Optional runtime AMD SMI enrichment** without a build-time or startup dependency.
-- **Small daily summaries** containing peaks and energy when available; raw samples are never persisted.
+- **Small daily summaries** containing peaks, energy when available, and throttle episodes; raw samples are never persisted.
 - **Reusable Rust library API** exposing the canonical model and bounded `Monitor` interface.
 - **Terminal-safe lifecycle** with cursor, raw-mode, and alternate-screen restoration on normal quit, catchable signals, and fatal errors.
 
@@ -449,7 +449,9 @@ with fallback:
 ~/.local/state/gpuflo/daily.json
 ```
 
-It contains per-GPU activity and memory peaks plus energy when a source provides a usable counter. Writes are atomic. Raw samples, graphs, process rows, names, container identities, and command lines are never persisted.
+It contains per-GPU activity and memory peaks, energy when a source provides a usable counter, and throttle episodes from the kernel health signal GPUFlo already reads. The `throttle_episodes` key is omitted for a GPU with none. Each episode records `started_at` (the local-offset RFC 3339 time of the first observation with an active source-reported throttle), `ended_at` (when first observed to have ended), `duration_seconds`, and `reasons` (the source-named reason groups as first observed). An in-progress throttle episode is saved open, without `ended_at` or `duration_seconds`. Up to 64 throttle episodes are kept per GPU per day; closed episodes are dropped oldest-first across GPUs to stay within the 64 KiB file budget, but an open episode is never dropped. Throttle episodes appear only in `daily.json`, not in the TUI or `--json`/`--json-stream` output. No new source, process, name, or command-line data is stored.
+
+Writes are atomic. Raw samples, graphs, process rows, names, container identities, and command lines are never persisted.
 
 GPUFlo performs no network access and has no telemetry upload, update check, remote API, service, or daemon.
 
@@ -483,7 +485,7 @@ The same launch command can be placed behind a compositor keybinding or startup 
 
 Multiple GPUFlo processes can run at once. They do not claim exclusive GPU access, ports, sockets, or singleton locks. Each instance owns its selection, tagline, graphs, session peaks, overlays, and sampling lanes.
 
-One caveat: CLI instances normally share the daily summary file. Writes remain atomic, but concurrently exiting processes can replace one another's independently accumulated peaks. Isolate an occasional secondary instance with a session-local state root:
+One caveat: CLI instances normally share the daily summary file. Writes remain atomic, but concurrently exiting processes can replace one another's independently accumulated peaks and throttle episodes. Isolate an occasional secondary instance with a session-local state root:
 
 ```sh
 XDG_STATE_HOME="$XDG_RUNTIME_DIR/gpuflo-terminal" gpuflo
