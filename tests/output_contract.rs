@@ -2,9 +2,7 @@
 //! serde types, per the 2026-08-20 machine-readable output design.
 
 use gpuflo::{
-    Health, HealthCategory, Memory, MemoryPool, Observation, ObservationState, Partition,
-    PartitionId, PciBdf, PhysicalGpu, PhysicalGpuId, Platform, PlatformId, Power, SCHEMA_VERSION,
-    Snapshot, Temperature, Timestamp,
+    MemoryPool, Observation, ObservationState, PhysicalGpu, SCHEMA_VERSION, Snapshot, Timestamp,
 };
 use serde_json::Value;
 use time::macros::datetime;
@@ -23,90 +21,83 @@ fn last_good() -> Timestamp {
 
 /// A healthy MI300X-like discrete GPU with one (SPX) partition.
 fn discrete_gpu() -> PhysicalGpu {
-    PhysicalGpu {
-        id: PhysicalGpuId::new("gpu-73fbc1"),
-        index: 0,
-        bdf: PciBdf::parse("0000:41:00.0").unwrap(),
-        name: "AMD Instinct MI300X".to_owned(),
-        uuid: Some("af1f4235-0000-1000-8000-000000000000".to_owned()),
-        serial: None,
-        platform: Platform {
-            id: PlatformId::GENERIC_DISCRETE,
-            memory_pool: MemoryPool::VRAM,
+    serde_json::from_value(serde_json::json!({
+        "id": "gpu-73fbc1",
+        "index": 0,
+        "bdf": "0000:41:00.0",
+        "name": "AMD Instinct MI300X",
+        "uuid": "af1f4235-0000-1000-8000-000000000000",
+        "platform": { "id": "generic_discrete", "memory_pool": "vram" },
+        "health": {
+            "category": "none",
+            "message": "no active limits or faults",
+            "observed_at": observed(),
         },
-        health: Health {
-            category: HealthCategory::NONE,
-            message: "no active limits or faults".to_owned(),
-            observed_at: observed(),
+        "temperature": {
+            "hotspot_celsius": Observation::value(74.0, observed()),
+            "limit_celsius": Observation::value(95.0, observed()),
         },
-        temperature: Temperature {
-            hotspot_celsius: Observation::value(74.0, observed()),
-            limit_celsius: Observation::value(95.0, observed()),
+        "power": {
+            "socket_watts": Observation::value(318.0, observed()),
+            "cap_watts": Observation::value(320.0, observed()),
         },
-        power: Power {
-            socket_watts: Observation::value(318.0, observed()),
-            cap_watts: Observation::value(320.0, observed()),
-        },
-        partitions: vec![Partition {
-            id: PartitionId::new("gpu-73fbc1-xcp-0"),
-            index: 0,
-            is_primary: true,
-            activity_percent: Observation::value(97.0, observed()),
-            memory: Memory {
-                pool: MemoryPool::VRAM,
-                used_bytes: Observation::value(195_850_508_697, observed()),
-                total_bytes: Observation::value(206_158_430_208, observed()),
-                occupancy_percent: Observation::value(95.0, observed()),
+        "partitions": [{
+            "id": "gpu-73fbc1-xcp-0",
+            "index": 0,
+            "is_primary": true,
+            "activity_percent": Observation::value(97.0, observed()),
+            "memory": {
+                "pool": "vram",
+                "used_bytes": Observation::value(195_850_508_697u64, observed()),
+                "total_bytes": Observation::value(206_158_430_208u64, observed()),
+                "occupancy_percent": Observation::value(95.0, observed()),
             },
-            gfx_clock_mhz: Observation::value(1700.0, observed()),
-            memory_controller_activity_percent: Observation::value(64.0, observed()),
+            "gfx_clock_mhz": Observation::value(1700.0, observed()),
+            "memory_controller_activity_percent": Observation::value(64.0, observed()),
         }],
-    }
+    }))
+    .unwrap()
 }
 
 /// An APU with a shared pool and several unavailable states, including stale.
 fn apu_gpu() -> PhysicalGpu {
-    PhysicalGpu {
-        id: PhysicalGpuId::new("gpu-9a02cc"),
-        index: 1,
-        bdf: PciBdf::parse("0000:c5:00.0").unwrap(),
-        name: "AMD Ryzen AI Max+ 395".to_owned(),
-        uuid: None,
-        serial: None,
-        platform: Platform {
-            id: PlatformId::STRIX_HALO,
-            memory_pool: MemoryPool::GTT,
+    serde_json::from_value(serde_json::json!({
+        "id": "gpu-9a02cc",
+        "index": 1,
+        "bdf": "0000:c5:00.0",
+        "name": "AMD Ryzen AI Max+ 395",
+        "platform": { "id": "strix_halo", "memory_pool": "gtt" },
+        "health": {
+            "category": "telemetry",
+            "message": "hotspot telemetry is stale",
+            "observed_at": sampled_at(),
         },
-        health: Health {
-            category: HealthCategory::TELEMETRY,
-            message: "hotspot telemetry is stale".to_owned(),
-            observed_at: sampled_at(),
+        "temperature": {
+            "hotspot_celsius": Observation::<f64>::stale(last_good()),
+            "limit_celsius": Observation::<f64>::unavailable(ObservationState::UNSUPPORTED_HARDWARE),
         },
-        temperature: Temperature {
-            hotspot_celsius: Observation::stale(last_good()),
-            limit_celsius: Observation::unavailable(ObservationState::UNSUPPORTED_HARDWARE),
+        "power": {
+            "socket_watts": Observation::<f64>::unavailable(ObservationState::PERMISSION_DENIED),
+            "cap_watts": Observation::<f64>::unavailable(ObservationState::UNSUPPORTED_DRIVER_VERSION),
         },
-        power: Power {
-            socket_watts: Observation::unavailable(ObservationState::PERMISSION_DENIED),
-            cap_watts: Observation::unavailable(ObservationState::UNSUPPORTED_DRIVER_VERSION),
-        },
-        partitions: vec![Partition {
-            id: PartitionId::new("gpu-9a02cc-xcp-0"),
-            index: 0,
-            is_primary: true,
-            activity_percent: Observation::unavailable(ObservationState::ASLEEP),
-            memory: Memory {
-                pool: MemoryPool::SHARED,
-                used_bytes: Observation::value(9_663_676_416, observed()),
-                total_bytes: Observation::value(34_359_738_368, observed()),
-                occupancy_percent: Observation::value(28.125, observed()),
+        "partitions": [{
+            "id": "gpu-9a02cc-xcp-0",
+            "index": 0,
+            "is_primary": true,
+            "activity_percent": Observation::<f64>::unavailable(ObservationState::ASLEEP),
+            "memory": {
+                "pool": "shared",
+                "used_bytes": Observation::value(9_663_676_416u64, observed()),
+                "total_bytes": Observation::value(34_359_738_368u64, observed()),
+                "occupancy_percent": Observation::value(28.125, observed()),
             },
-            gfx_clock_mhz: Observation::unavailable(ObservationState::SOURCE_ERROR),
-            memory_controller_activity_percent: Observation::unavailable(
+            "gfx_clock_mhz": Observation::<f64>::unavailable(ObservationState::SOURCE_ERROR),
+            "memory_controller_activity_percent": Observation::<f64>::unavailable(
                 ObservationState::UNSUPPORTED_HARDWARE,
             ),
         }],
-    }
+    }))
+    .unwrap()
 }
 
 fn snapshot(sequence: Option<u64>) -> Snapshot {

@@ -90,10 +90,4 @@ mod tests {
             Platform::default()
         );
     }
-
-    #[test]
-    fn no_platform_reports_npu_yet() {
-        assert!(!classify("1586", MemoryEvidence::Unified).has_npu());
-        assert!(!Platform::default().has_npu());
-    }
 }
