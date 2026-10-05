@@ -13,7 +13,7 @@ permissions:
 jobs:
   release:
     name: build and publish the x86_64 archive
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
