@@ -573,6 +573,8 @@ cargo package --locked
 
 Validation is deliberately risk-based rather than exhaustive. It covers source fixtures, observation semantics, physical/XCP scope, bounded monitor journeys, text and JSON contracts, responsive rendering, actual PTY terminal restoration, packaging, and live hardware evidence. See [`validation/`](validation/) for the current manifest and exact qualification claims.
 
+Maintainers can follow the [release checklist](docs/releasing.md) for the validation, tagging, and publication steps.
+
 ## License and notices
 
 GPUFlo is licensed under the [MIT License](LICENSE). Locked dependency and reused-code notices are included in [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt).
