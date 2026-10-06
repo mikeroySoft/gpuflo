@@ -19,17 +19,11 @@ Notable changes to GPUFlo are recorded here in [Keep a Changelog](https://keepac
 - **Breaking (library):** `Snapshot`, `PhysicalGpu`, `Partition`, `Memory`, `Health`, `Temperature`, `Power`, and `Platform` are `#[non_exhaustive]`. Obtain them from `Monitor` or by deserializing; struct literals no longer compile outside the crate (#20).
 - The daily summary writer refuses records larger than the 64 KiB it can load back, preserving the previous file (#15).
 - Strix Halo GTT accounting now uses the platform classifier, with unchanged results (#3).
+- Project tooling, not shipped in the crate or binary: AI-factory tooling and factory dashboard themes (#4, #5, #6, #17); project website pages; CI and release runners pinned to `ubuntu-24.04` (#18); README daily-summary disclosure (#19).
 
 ### Fixed
 
 - No user-facing bug fixes.
-
-### Internal
-
-- AI-factory tooling and factory dashboard themes, none of them shipped (#4, #5, #6, #17).
-- Project website pages.
-- CI and release runners pinned to `ubuntu-24.04` (#18).
-- README daily-summary disclosure (#19).
 
 ## [0.1.1] - 2026-08-27
 
@@ -37,9 +31,6 @@ Notable changes to GPUFlo are recorded here in [Keep a Changelog](https://keepac
 
 - Fixture-backed Strix Halo (`1002:1586`) GTT accounting; other devices retain their existing KFD classification. Credit: Matt Elliott (0.1.1, #1).
 - Opt-in `--cat` / `cat = true` sleeping-cat TUI decoration, kept off instrument surfaces, overlays, tiny mode, and terminals without enough free space.
-
-### Internal
-
 - Repository GitHub Pages site and animated dashboard presentation.
 
 ## [0.1.0] - 2026-08-24
@@ -54,9 +45,6 @@ Notable changes to GPUFlo are recorded here in [Keep a Changelog](https://keepac
 ### Changed
 
 - Renamed the crate, binary, and documentation from gruflo to gpuflo before the public release.
-
-### Internal
-
 - Documentation, screenshot, installer script, and release-workflow gate repair. The gate compares the tagged tree with the validated commit outside `validation/`.
 
 [0.2.0]: https://github.com/mikeroysoft/gpuflo/compare/v0.1.1...v0.2.0
