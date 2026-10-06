@@ -483,6 +483,52 @@ window-rule {
 
 The same launch command can be placed behind a compositor keybinding or startup rule. `compact` provides more telemetry at `62×17` or larger; `tiny` supplies a persistent one-line widget.
 
+### Hyprland / Omarchy 4 (Quattro)
+
+With `gpuflo` and `jq` on PATH, add this rule to `~/.config/hypr/apps.lua`
+(or another loaded Hyprland Lua window-rules file):
+
+```lua
+o.window("org.omarchy.gpuflo", { tag = "+floating-window" })
+```
+
+Check `omarchy menu keybindings --print` before choosing a free key. For
+example, if `SUPER + ALT + P` is free, add to `~/.config/hypr/bindings.lua`:
+
+```lua
+o.bind("SUPER + ALT + P", "GPUFlo", "omarchy-launch-or-focus-tui --app-id=org.omarchy.gpuflo gpuflo --mode compact")
+```
+
+For an app-launcher entry, run:
+
+```sh
+omarchy-tui-install GPUFlo "gpuflo --mode compact" float utilities-system-monitor
+```
+
+The launcher uses the shared `TUI.float` app ID; the dedicated keybinding
+above uses `org.omarchy.gpuflo` for focus-or-launch.
+
+Optionally add an entry inside `~/.config/omarchy/extensions/omarchy-menu.jsonc`:
+
+```jsonc
+"personal.gpuflo": {"icon":"󰾲","label":"GPUFlo","action":"omarchy-launch-or-focus-tui --app-id=org.omarchy.gpuflo gpuflo --mode compact","when":"command -v gpuflo"},
+```
+
+For the Quattro bar, copy `scripts/omarchy-bar` to an executable path such as
+`~/.local/bin/gpuflo-omarchy-bar`. Add this item to a `bar.layout` section
+(for example `right`) in `~/.config/omarchy/shell.json`:
+
+```json
+{"id":"gpuflo","type":"command","exec":"~/.local/bin/gpuflo-omarchy-bar","interval":5,"onClick":"omarchy-launch-or-focus-tui --app-id=org.omarchy.gpuflo gpuflo --mode compact"}
+```
+
+Use an interval of at least 1 second. The wrapper returns one JSON line with
+`text`, `tooltip`, and `class`; `class` is `"active"` only for a throttle or
+fault. It reads primary-partition activity and physical-GPU hotspot, socket
+power, and health from schema version 1. Its isolated
+`XDG_STATE_HOME="$XDG_RUNTIME_DIR/gpuflo-bar"` is required so bar polls do not
+rewrite your real `daily.json`.
+
 ## Multiple simultaneous instances
 
 Multiple GPUFlo processes can run at once. They do not claim exclusive GPU access, ports, sockets, or singleton locks. Each instance owns its selection, tagline, graphs, session peaks, overlays, and sampling lanes.
