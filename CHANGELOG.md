@@ -2,7 +2,7 @@
 
 Notable changes to GPUFlo are recorded here in [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) style. The Rust library follows Cargo semver; JSON and NDJSON output are versioned separately by `schema_version`. See the [README compatibility policy](README.md#compatibility-policy).
 
-## [0.2.0] - Unreleased
+## [0.2.0] - 2026-10-05
 
 ### Added
 
