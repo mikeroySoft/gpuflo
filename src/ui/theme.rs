@@ -27,6 +27,19 @@ pub(super) struct Palette {
 /// Role colors for one built-in theme, with an ANSI fallback when terminal
 /// environment evidence does not advertise truecolor.
 pub(super) fn palette(theme: Theme, truecolor: bool) -> Palette {
+    if theme == Theme::Terminal {
+        return Palette {
+            bg: Color::Reset,
+            fg: Color::Reset,
+            muted: Color::DarkGray,
+            dim: Color::DarkGray,
+            accent: Color::Blue,
+            warning: Color::Yellow,
+            fault: Color::Red,
+            border: Color::DarkGray,
+            graph: Color::Blue,
+        };
+    }
     if !truecolor {
         return match theme {
             Theme::Buffalo => Palette {
@@ -62,6 +75,7 @@ pub(super) fn palette(theme: Theme, truecolor: bool) -> Palette {
                 border: Color::DarkGray,
                 graph: Color::Gray,
             },
+            Theme::Terminal => unreachable!(),
         };
     }
     match theme {
@@ -98,6 +112,25 @@ pub(super) fn palette(theme: Theme, truecolor: bool) -> Palette {
             border: Color::Rgb(120, 120, 120),
             graph: Color::Rgb(208, 208, 208),
         },
+        Theme::Terminal => unreachable!(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn terminal_palette_follows_terminal_colors() {
+        for truecolor in [false, true] {
+            let colors = palette(Theme::Terminal, truecolor);
+            assert_eq!(colors.bg, Color::Reset);
+            assert_eq!(colors.fg, Color::Reset);
+            assert_eq!(colors.accent, Color::Blue);
+            assert_eq!(colors.warning, Color::Yellow);
+            assert_eq!(colors.fault, Color::Red);
+            assert_eq!(colors.muted, Color::DarkGray);
+        }
     }
 }
 

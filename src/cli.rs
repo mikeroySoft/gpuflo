@@ -31,7 +31,7 @@ Selection:
                    all-GPU outputs (--once, --json, --json-stream) are unfiltered.
 
 Visual options (interactive TUI only; stdout output is always ANSI-free):
-  --theme <NAME>   buffalo | nord | monochrome
+  --theme <NAME>   buffalo | nord | monochrome | terminal
   --mode <NAME>    auto | mode | compact | mini | tiny
   --no-color       Disable color (a non-empty NO_COLOR does the same)
   --cat            Show a sleeping ASCII cat when the selected GPU is warm
