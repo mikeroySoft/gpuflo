@@ -91,6 +91,8 @@ pub(crate) enum Theme {
     Nord,
     /// Neutral palette for minimal-color terminals.
     Monochrome,
+    /// Terminal palette that follows ANSI colors.
+    Terminal,
 }
 
 impl Theme {
@@ -99,6 +101,7 @@ impl Theme {
             Self::Buffalo => "buffalo",
             Self::Nord => "nord",
             Self::Monochrome => "monochrome",
+            Self::Terminal => "terminal",
         }
     }
 
@@ -108,6 +111,7 @@ impl Theme {
             Self::Buffalo => Self::Nord,
             Self::Nord => Self::Monochrome,
             Self::Monochrome => Self::Buffalo,
+            Self::Terminal => Self::Buffalo,
         }
     }
 }
@@ -120,10 +124,23 @@ impl TryFrom<String> for Theme {
             "buffalo" => Ok(Self::Buffalo),
             "nord" => Ok(Self::Nord),
             "monochrome" => Ok(Self::Monochrome),
+            "terminal" => Ok(Self::Terminal),
             other => Err(format!(
-                "unknown theme {other:?}; expected buffalo, nord, or monochrome"
+                "unknown theme {other:?}; expected buffalo, nord, monochrome, or terminal"
             )),
         }
+    }
+}
+
+#[cfg(test)]
+mod terminal_theme_tests {
+    use super::*;
+
+    #[test]
+    fn terminal_theme_parses_from_config_and_cli_value() {
+        assert_eq!(Theme::try_from("terminal".to_owned()), Ok(Theme::Terminal));
+        let file: FileConfig = toml::from_str("theme = \"terminal\"\n").unwrap();
+        assert_eq!(file.theme, Some(Theme::Terminal));
     }
 }
 

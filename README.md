@@ -25,7 +25,7 @@ It is strictly local and read-only. GPUFlo reads Linux `amdgpu` kernel interface
 - **Honest unavailable states** instead of zeroes, blank values, or guessed data.
 - **Process attribution overlay** for PID, name, GPU/XCP, VRAM, GTT, KFD memory, and container identity.
 - **Human, JSON, and NDJSON output** from the same canonical telemetry model.
-- **Three themes and complete no-color operation** without making color carry required meaning.
+- **Four themes and complete no-color operation** without making color carry required meaning.
 - **100 positive rotating taglines**—one is chosen randomly at launch and remains stable for that session.
 - **Optional sleeping ASCII cat** (`--cat`)—naps in the margin once the selected GPU is warm; pure decoration, never touches telemetry.
 - **Optional runtime AMD SMI enrichment** without a build-time or startup dependency.
@@ -275,7 +275,7 @@ Run `gpuflo --help` for the authoritative option reference.
 | `--for <duration>` | Stop `--json-stream` after a window; positive seconds (bare or `s`), minutes (`m`), or hours (`h`), including decimals |
 | `--tiny` | Print one selected-GPU status line, then exit |
 | `--gpu <index\|id\|bdf>` | Select the GPU for `--tiny` or the initial interactive selection |
-| `--theme <buffalo\|nord\|monochrome>` | Select the interactive theme |
+| `--theme <buffalo\|nord\|monochrome\|terminal>` | Select the interactive theme |
 | `--mode <auto\|mode\|compact\|mini\|tiny>` | Select the preferred interactive view |
 | `--no-color` | Disable interactive color |
 | `--cat` | Show a sleeping ASCII cat once the selected GPU is warm |
@@ -421,11 +421,13 @@ with fallback:
 The complete schema is intentionally small:
 
 ```toml
-theme = "buffalo"       # buffalo | nord | monochrome
+theme = "buffalo"       # buffalo | nord | monochrome | terminal
 mode = "auto"           # auto | mode | compact | mini | tiny
 no_color = false
 cat = false             # sleeping ASCII cat when the selected GPU is warm
 ```
+
+Set `theme = "terminal"` to use the terminal's foreground, background, and ANSI palette. On Omarchy 4, theme switches retint open terminals, so a running GPUFlo follows the active Omarchy theme without extra hooks.
 
 Precedence is:
 
