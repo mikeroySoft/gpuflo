@@ -198,7 +198,10 @@ pub(crate) fn parse_gpu_metrics(bytes: &[u8]) -> Result<GpuMetricsBlob, BlobErro
             energy: f.r64(24).map(|raw| (raw, ENERGY_JOULES_PER_COUNT)),
             throttle: ThrottleReading::Status {
                 status: throttle_bits(f.u32(68)),
-                indep: f.r64(112),
+                // dGPU PMFW (RDNA 3/4) keeps TEMP_HOTSPOT set even at idle
+                // (drm/amd#3251, ROCm/rocm-systems#11781); MangoHud clears
+                // it the same way. Real thermal limits use the other bits.
+                indep: f.r64(112).map(|indep| indep & !TEMP_HOTSPOT_BIT),
             },
         },
         (1, content @ 4..=8) => {
@@ -295,6 +298,9 @@ pub(crate) fn parse_gpu_metrics(bytes: &[u8]) -> Result<GpuMetricsBlob, BlobErro
     };
     Ok(blob)
 }
+
+/// `SMU_THROTTLER_TEMP_HOTSPOT_BIT` in `indep_throttle_status`.
+const TEMP_HOTSPOT_BIT: u64 = 1 << 36;
 
 /// `indep_throttle_status` reason groups (SMU_THROTTLER_* bit ranges):
 /// bits 0–7 power, 16–23 current, 32–47 temperature.
@@ -792,11 +798,13 @@ impl KernelSource {
         match throttle {
             ThrottleReading::None => {}
             ThrottleReading::Status { status, indep } => {
-                if *status != 0 {
-                    let reasons = match indep {
-                        Some(indep) if *indep != 0 => indep_reasons(*indep).join(", "),
-                        _ => String::new(),
-                    };
+                // The kernel derives `indep` from the ASIC bits; when present
+                // it decides, so a masked-off quirk bit cannot leak through.
+                let active = indep.map_or(*status != 0, |indep| indep != 0);
+                if active {
+                    let reasons = indep
+                        .map(|indep| indep_reasons(indep).join(", "))
+                        .unwrap_or_default();
                     health.push(KernelHealthSignal::ThrottleActive { reasons });
                 }
             }
@@ -1406,6 +1414,39 @@ mod tests {
         assert_eq!(blob.socket_power_microwatts, Reading::Sentinel);
         assert_eq!(blob.activity_centipercent, Reading::Sentinel);
         assert_eq!(blob.energy, None);
+    }
+
+    #[test]
+    fn dgpu_always_set_hotspot_bit_is_not_a_throttle() {
+        // Live R9700 (SMU 14.0.2) v1.3 values: idle reports only TEMP_HOTSPOT;
+        // load at the power cap adds PPT0.
+        let (mut source, devices) = source("boundary-throttle");
+        let health_for = |source: &mut KernelSource, status: u32, indep: u64| {
+            let mut bytes = vec![0u8; 120];
+            bytes[0..2].copy_from_slice(&120u16.to_le_bytes());
+            bytes[2] = 1;
+            bytes[3] = 3;
+            bytes[68..72].copy_from_slice(&status.to_le_bytes());
+            bytes[112..120].copy_from_slice(&indep.to_le_bytes());
+            let blob = parse_gpu_metrics(&bytes).unwrap();
+            let mut health = Vec::new();
+            source.throttle_health(&devices[0], &blob.throttle, &mut health);
+            health
+        };
+        assert!(health_for(&mut source, 0x2, 1 << 36).is_empty());
+        assert_eq!(
+            health_for(&mut source, 0x4002, (1 << 36) | 1),
+            vec![KernelHealthSignal::ThrottleActive {
+                reasons: "power".to_owned()
+            }]
+        );
+        // Other temperature bits remain genuine thermal throttles.
+        assert_eq!(
+            health_for(&mut source, 0x3, (1 << 36) | (1 << 32)),
+            vec![KernelHealthSignal::ThrottleActive {
+                reasons: "thermal".to_owned()
+            }]
+        );
     }
 
     #[test]

@@ -261,6 +261,8 @@ The kernel path is authoritative:
 
 Implemented `gpu_metrics` families are v1.3–v1.8, v2.1–v2.4, and v3.0. Dynamic v1.9 is detected and represented as `unsupported_driver_version` rather than decoded with a guessed structure; independent stable text nodes continue reporting.
 
+Discrete-GPU `gpu_metrics` v1.3 firmware on RDNA 3 and RDNA 4 keeps the `TEMP_HOTSPOT` throttle bit set even at idle ([drm/amd#3251](https://gitlab.freedesktop.org/drm/amd/-/issues/3251), [ROCm/rocm-systems#11781](https://github.com/ROCm/rocm-systems/issues/11781)). GPUFlo ignores that one bit, as MangoHud does; power, current, and other temperature throttle bits still report.
+
 When `libamd_smi.so` is available, GPUFlo loads it at runtime and uses it only to enrich fields not supplied by a fresh kernel observation. A missing library, incompatible ABI, unavailable symbol, or runtime failure disables only enrichment and is retried behind a cooldown.
 
 ## Command-line output

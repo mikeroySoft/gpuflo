@@ -2,6 +2,17 @@
 
 Notable changes to GPUFlo are recorded here in [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) style. The Rust library follows Cargo semver; JSON and NDJSON output are versioned separately by `schema_version`. See the [README compatibility policy](README.md#compatibility-policy).
 
+## [0.2.1] - 2026-10-06
+
+### Added
+
+- `theme = "terminal"` / `--theme terminal` follows the terminal's own foreground, background, and ANSI palette (#31).
+- Omarchy 4 (Quattro) launch, menu, and status-bar instructions, plus the `scripts/omarchy-bar` wrapper in the repository (#30).
+
+### Fixed
+
+- Discrete RDNA 3/RDNA 4 GPUs no longer report a permanent `thermal throttle active`. Their firmware keeps `TEMP_HOTSPOT` (`indep_throttle_status` bit 36) set even at idle; GPUFlo now ignores that bit in `gpu_metrics` v1.3, matching MangoHud, and decides throttling from `indep_throttle_status` whenever the kernel supplies it. Power, current, and other temperature throttles still report, so health, `daily.json` throttle episodes, and the Omarchy bar `active` class stop flagging idle GPUs.
+
 ## [0.2.0] - 2026-10-05
 
 ### Added
@@ -47,6 +58,7 @@ Notable changes to GPUFlo are recorded here in [Keep a Changelog](https://keepac
 - Renamed the crate, binary, and documentation from gruflo to gpuflo before the public release.
 - Documentation, screenshot, installer script, and release-workflow gate repair. The gate compares the tagged tree with the validated commit outside `validation/`.
 
+[0.2.1]: https://github.com/mikeroysoft/gpuflo/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/mikeroysoft/gpuflo/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/mikeroysoft/gpuflo/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/mikeroysoft/gpuflo/releases/tag/v0.1.0
