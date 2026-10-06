@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+XDG_STATE_HOME="${XDG_RUNTIME_DIR:?}/gpuflo-bar" gpuflo --json | jq -c '
+  def value($observation): $observation.value // null;
+  def metric($observation; $unit):
+    (value($observation) | if . == null then "—" else (round | tostring) + $unit end);
+  def row:
+    . as $gpu
+    | ($gpu.partitions | map(select(.is_primary)) | first) as $primary
+    | "\($gpu.name) \(metric($primary.activity_percent; "%")) · \(metric($gpu.temperature.hotspot_celsius; "°C")) · \(metric($gpu.power.socket_watts; " W")) · \($gpu.health.message)";
+  {
+    text: (if (.gpus | length) == 0 then "GPUFlo —" else (.gpus | map(. as $gpu | ($gpu.partitions | map(select(.is_primary)) | first) as $primary | "GPU \($gpu.index) \(metric($primary.activity_percent; "%"))") | join(" · ")) end),
+    tooltip: (.gpus | map(row) | join("\n")),
+    class: (if any(.gpus[]; .health.category == "throttle" or .health.category == "fault") then "active" else "" end)
+  }
+'
