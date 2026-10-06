@@ -102,7 +102,7 @@
       <div class="label">Install</div>
       <div class="cmd"><code><span class="p">$</span> cargo install gpuflo --locked</code><button data-c="cargo install gpuflo --locked">copy</button></div>
       <div class="cmd"><code><span class="p">$</span> curl -fsSL https://raw.githubusercontent.com/mikeroySoft/gpuflo/main/install.sh | sh</code><button data-c="curl -fsSL https://raw.githubusercontent.com/mikeroySoft/gpuflo/main/install.sh | sh">copy</button></div>
-      <p class="note">No ROCm. No root. No daemon. Just Linux and the in-kernel <a href="#what">amdgpu</a> driver. Checksums on every <a href="https://github.com/mikeroySoft/gpuflo/releases">release</a>.</p>
+      <p class="note">No ROCm. No root. No daemon. Just Linux and the in-kernel <a href="#what">amdgpu</a> driver. Current release: <a href="https://github.com/mikeroySoft/gpuflo/releases/tag/v0.2.0">v0.2.0</a> with checksums.</p>
     </div>
   </header>
 
@@ -115,7 +115,7 @@
       <div class="sect">Memory occupancy&nbsp;&nbsp;<span class="val"><span id="mem">24.9</span> / 32 GiB · <span id="memp">78</span>%</span><span class="peak">VRAM</span></div>
       <canvas id="cv-mem" width="1600" height="150"></canvas>
       <div class="stats">hotspot <b><span id="temp">54</span> / 110°C</b> &nbsp;·&nbsp; power <b><span id="pow">47</span> / 300 W</b> &nbsp;·&nbsp; GFX <b><span id="clk">1113</span> MHz</b></div>
-      <div class="keys">←/→ GPU · t buffalo · m mode · p processes · d detail · ? help · q quit</div>
+      <div class="keys">←/→ · h GPU · l logo · t buffalo · m mode · p processes · d detail · ? help · q quit</div>
     </div>
   </div>
 
@@ -135,25 +135,29 @@
       <div class="card"><h3>Light</h3><p>One small static binary, strictly read-only. No ROCm userspace, no root, no daemon, no database, no network. Optional sources only ever add information.</p></div>
       <div class="card"><h3>Fast</h3><p>First reading in under a second. Telemetry samples on a dedicated 250 ms kernel lane that rendering, overlays, and process scans can never block.</p></div>
       <div class="card"><h3>Accurate</h3><p>Socket-scoped temperature and power kept separate from partition-scoped activity, memory, and clocks. Missing telemetry is an explicit state — <code>stale</code>, <code>asleep</code>, <code>permission_denied</code> — never a made-up zero.</p></div>
-      <div class="card"><h3>Extensible &amp; embeddable</h3><p>Stream <code>--json</code> / <code>--json-stream</code> NDJSON into scripts, or embed the semver-supported Rust <code>Monitor</code> API — the same canonical model that drives the TUI.</p></div>
+      <div class="card"><h3>Extensible &amp; embeddable</h3><p>Stream <code>--json</code> / <code>--json-stream</code> NDJSON (optionally <code>--for &lt;duration&gt;</code>) into scripts. Every GPU carries additive <code>gpus[].platform</code> within <code>schema_version</code> 1. Or embed the semver-supported Rust <code>Monitor</code> API — the same canonical model that drives the TUI.</p></div>
       <div class="card"><h3>Responsive views</h3><p>Full <code>mode</code>, <code>compact</code>, <code>mini</code>, and one-line <code>tiny</code> views auto-select by terminal size. Works as a floating desktop widget.</p></div>
       <div class="card"><h3>Process attribution</h3><p>Press <code>p</code>: PID, name, GPU/XCP, VRAM, GTT, KFD memory, and container identity — permission failures shown explicitly rather than hidden.</p></div>
+      <div class="card"><h3>Honest daily summary</h3><p>Optional local <code>daily.json</code> keeps peaks, energy when available, and source-reported throttle episodes — never raw samples, never uploaded. Pin machine output on <code>schema_version</code>, not the binary version.</p></div>
     </div>
   </section>
 
   <section id="extend">
     <h2>Extend it</h2>
-    <p class="lead">The same canonical telemetry model drives the TUI, a stable <b>JSON/NDJSON contract</b> for scripts and pipelines, and a semver-supported <b>Rust library</b> for embedding.</p>
+    <p class="lead">The same canonical telemetry model drives the TUI, a stable <b>JSON/NDJSON contract</b> (<code>schema_version</code> 1 — pin on it; additive fields like <code>gpus[].platform</code> stay compatible), and a semver-supported <b>Rust library</b> for embedding.</p>
     <div class="cols">
       <div>
         <h3>Stream NDJSON into anything</h3>
-<pre><span class="c"># one snapshot, or a continuous stream</span>
-<span class="f">gpuflo</span> --json
+<pre><span class="c"># one snapshot, a stream, or a bounded capture</span>
+<span class="f">gpuflo</span> --json | jq <span class="s">'.gpus[].platform'</span>
 <span class="f">gpuflo</span> --json-stream | jq .gpus[0].activity
+<span class="f">gpuflo</span> --json-stream --for 30s &gt; capture.ndjson
 
-<span class="c"># never null, NaN, or fake zero:</span>
-{ <span class="s">"value"</span>: 97.0,
-  <span class="s">"observed_at"</span>: <span class="s">"2026-08-21T23:45:12Z"</span> }
+<span class="c"># schema_version 1 · each gpus[] has platform · never null/NaN/fake zero</span>
+{ <span class="s">"schema_version"</span>: 1, <span class="s">"gpuflo_version"</span>: <span class="s">"0.2.0"</span>, ... }
+<span class="c"># gpus[].platform (additive within schema 1):</span>
+{ <span class="s">"id"</span>: <span class="s">"generic_discrete"</span>, <span class="s">"memory_pool"</span>: <span class="s">"vram"</span> }
+{ <span class="s">"value"</span>: 97.0, <span class="s">"observed_at"</span>: <span class="s">"2026-08-21T23:45:12Z"</span> }
 { <span class="s">"state"</span>: <span class="s">"permission_denied"</span> }</pre>
       </div>
       <div>
@@ -180,7 +184,7 @@
   </section>
 
   <footer>
-    <span>MIT licensed · no telemetry upload, ever</span>
+    <span>MIT licensed · v0.2.0 · no telemetry upload, ever</span>
     <span><a href="https://github.com/mikeroySoft/gpuflo">github.com/mikeroySoft/gpuflo</a></span>
   </footer>
 </div>
